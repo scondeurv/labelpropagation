@@ -133,12 +133,37 @@ def benchmark_burst(num_nodes, num_partitions, max_iter, memory_mb, granularity=
         results = dt.get_results()
         if not results:
             print("Error: No results from burst execution", file=sys.stderr)
-            return None
+            return None, None
         
-        return finished - host_submit
+        # Calculate algorithmic time from worker timestamps
+        worker_starts = []
+        worker_ends = []
+        
+        for r in results:
+            # results might be [[worker0_out], [worker1_out]] because the action returns a list
+            worker_data = r
+            if isinstance(r, list) and len(r) > 0:
+                worker_data = r[0]
+                
+            if isinstance(worker_data, dict) and "timestamps" in worker_data:
+                # Print results report if present (from root worker)
+                if "results" in worker_data and worker_data["results"]:
+                    print(worker_data["results"])
+                
+                ts_map = {ts["key"]: int(ts["value"]) for ts in worker_data["timestamps"]}
+                if "worker_start" in ts_map:
+                    worker_starts.append(ts_map["worker_start"])
+                if "worker_end" in ts_map:
+                    worker_ends.append(ts_map["worker_end"])
+        
+        algo_time = None
+        if worker_starts and worker_ends:
+            algo_time = max(worker_ends) - min(worker_starts)
+            
+        return (finished - host_submit), algo_time
     except Exception as e:
         print(f"Error running burst: {e}", file=sys.stderr)
-        return None
+        return None, None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark LP: Standalone vs Burst")
@@ -172,9 +197,10 @@ if __name__ == "__main__":
     
     # Benchmark burst
     burst_time = None
+    algo_time = None
     if not args.skip_burst:
         print(f"Running burst version...")
-        burst_time = benchmark_burst(
+        burst_time, algo_time = benchmark_burst(
             args.nodes, 
             args.partitions, 
             args.iter, 
@@ -185,18 +211,28 @@ if __name__ == "__main__":
             args.s3_endpoint
         )
         if burst_time is not None:
-            print(f"Burst Time: {burst_time}")
+            print(f"Burst Time (Total): {burst_time} ms")
+            if algo_time:
+                print(f"Burst Time (Algorithmic): {algo_time} ms")
+                overhead = burst_time - algo_time
+                print(f"OpenWhisk Overhead: {overhead} ms ({(overhead/burst_time)*100:.1f}%)")
         else:
             print("Burst Time: FAILED")
     
     # Calculate speedup
-    if lpst_time and burst_time:
-        speedup = lpst_time / burst_time
-        print(f"Speedup: {speedup:.2f}x")
-        if speedup > 1.0:
-            print("✓ Burst is faster!")
-        else:
-            print("✗ Standalone is faster")
+    if lpst_time:
+        if burst_time:
+            speedup = lpst_time / burst_time
+            print(f"\nOverall Speedup: {speedup:.2f}x")
+        
+        if algo_time:
+            algo_speedup = lpst_time / algo_time
+            print(f"Algorithmic Speedup: {algo_speedup:.2f}x")
+            
+            if algo_speedup > 1.0:
+                print("✓ Algorithmically, Burst is faster!")
+            else:
+                print("✗ Even algorithmically, Standalone is faster")
     
     # Validation
     if args.validate:

@@ -88,27 +88,64 @@ fn timestamp(key: &str) -> Timestamp {
 pub struct LabelsMessage(pub Vec<u32>);
 
 impl From<Bytes> for LabelsMessage {
-    /// Deserializes a byte buffer into a vector of u32 labels (Little Endian)
+    /// Deserializes a byte buffer into a vector of u32 labels (Little Endian).
+    /// On LE platforms, uses a single memcpy into a properly aligned u32 buffer.
     fn from(bytes: Bytes) -> Self {
-        let vecu32 = bytes
-            .chunks_exact(4)
-            .map(|chunk| {
-                let arr: [u8; 4] = chunk.try_into().unwrap();
-                u32::from_le_bytes(arr)
-            })
-            .collect();
-        LabelsMessage(vecu32)
+        let count = bytes.len() / 4;
+        #[cfg(target_endian = "little")]
+        {
+            let mut result = Vec::<u32>::with_capacity(count);
+            // SAFETY: Vec<u32> is properly aligned for u32. On LE platforms, u32 in-memory
+            // representation matches the LE byte format. We copy exactly count*4 bytes
+            // into a buffer with capacity for `count` u32 values.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    bytes.as_ptr(),
+                    result.as_mut_ptr() as *mut u8,
+                    count * 4,
+                );
+                result.set_len(count);
+            }
+            LabelsMessage(result)
+        }
+        #[cfg(not(target_endian = "little"))]
+        {
+            let vecu32 = bytes
+                .chunks_exact(4)
+                .map(|chunk| {
+                    let arr: [u8; 4] = chunk.try_into().unwrap();
+                    u32::from_le_bytes(arr)
+                })
+                .collect();
+            LabelsMessage(vecu32)
+        }
     }
 }
 
 impl From<LabelsMessage> for Bytes {
-    /// Serializes a vector of u32 labels into a byte buffer (Little Endian)
+    /// Serializes a vector of u32 labels into a byte buffer (Little Endian).
+    /// On LE platforms, reinterprets the Vec<u32> memory directly as bytes (zero-copy).
     fn from(val: LabelsMessage) -> Self {
-        let mut bytes = Vec::with_capacity(val.0.len() * 4);
-        for num in val.0 {
-            bytes.extend_from_slice(&num.to_le_bytes());
+        #[cfg(target_endian = "little")]
+        {
+            let mut vec = std::mem::ManuallyDrop::new(val.0);
+            let byte_len = vec.len() * 4;
+            let byte_cap = vec.capacity() * 4;
+            let ptr = vec.as_mut_ptr() as *mut u8;
+            // SAFETY: On LE, Vec<u32> in-memory layout is identical to LE byte representation.
+            // Vec<u32> allocations are at least 4-byte aligned, satisfying u8's requirement.
+            // ManuallyDrop prevents double-free: memory ownership transfers to byte_vec.
+            let byte_vec = unsafe { Vec::from_raw_parts(ptr, byte_len, byte_cap) };
+            Bytes::from(byte_vec)
         }
-        Bytes::from(bytes)
+        #[cfg(not(target_endian = "little"))]
+        {
+            let mut bytes = Vec::with_capacity(val.0.len() * 4);
+            for num in val.0 {
+                bytes.extend_from_slice(&num.to_le_bytes());
+            }
+            Bytes::from(bytes)
+        }
     }
 }
 
@@ -365,6 +402,15 @@ fn label_propagation(
         }
     }
 
+    // O(1) seed lookup for the hot loop (replaces HashMap::contains_key)
+    let is_seed: Vec<bool> = {
+        let mut v = vec![false; params.num_nodes as usize];
+        for &node in initial_labels.keys() {
+            v[node as usize] = true;
+        }
+        v
+    };
+
     // Phase 1: Distributed Coordination to check if any worker has seed labels
     // This determines if we run in supervised mode (seed-based) or unsupervised mode (ID-based)
     let local_has_seeds_val = if !initial_labels.is_empty() { 1 } else { 0 };
@@ -426,19 +472,22 @@ fn label_propagation(
     let mut labels_b = vec![UNKNOWN; params.num_nodes as usize];
     let mut use_a_as_read = true;
 
+    // Pre-allocate local_updates with extra slot for piggybacked change count.
+    // This buffer is recycled across iterations to avoid per-iteration allocation.
+    let extended_size = (params.num_nodes as usize) + 1;
+    let mut local_updates = vec![UNKNOWN; extended_size];
+
     // Main Iterative Loop
+    // Optimization: convergence check is piggybacked on the label reduce+broadcast,
+    // cutting communication rounds from 4 to 2 per iteration.
     while iter < max_iter {
         timestamps.push(timestamp(&format!("iter_{}_start", iter)));
 
-        // Select read and write buffers
-        let (read_buf, write_buf) = if use_a_as_read {
-            (&labels_a, &mut labels_b)
-        } else {
-            (&labels_b, &mut labels_a)
-        };
+        // Select read buffer
+        let read_buf = if use_a_as_read { &labels_a } else { &labels_b };
 
         // 1. Compute local updates: each worker updates labels for its owned nodes
-        let mut local_updates = vec![UNKNOWN; params.num_nodes as usize];
+        local_updates.fill(UNKNOWN);
         let mut local_changed: u32 = 0;
 
         for &node in &graph.owned_nodes {
@@ -446,7 +495,7 @@ fn label_propagation(
             let current_label = read_buf[idx];
 
             // Primary constraint: don't update seed labels in supervised mode
-            if !unsupervised_mode && initial_labels.contains_key(&node) {
+            if !unsupervised_mode && is_seed[idx] {
                 local_updates[idx] = current_label;
                 continue;
             }
@@ -469,59 +518,56 @@ fn label_propagation(
                 local_changed += 1;
             }
         }
+        // Piggyback the change count at position num_nodes (avoids a separate reduce round)
+        local_updates[params.num_nodes as usize] = local_changed;
         timestamps.push(timestamp(&format!("iter_{}_compute", iter)));
 
-        // 2. Reduce labels from all workers into a single global vector
-        // Only one worker per node owns its label update
-        let reduced_labels = middleware
-            .reduce(LabelsMessage(local_updates), |mut left, right| {
-                for (a, b) in left.0.iter_mut().zip(right.0.iter()) {
-                    if *a == UNKNOWN { *a = *b; }
+        // 2. Single reduce: merge labels across workers + sum piggybacked change counts
+        //    (Previously this was 2 separate reduces: one for labels, one for change count)
+        let reduced = middleware
+            .reduce(LabelsMessage(std::mem::replace(&mut local_updates, Vec::new())), |mut left, right| {
+                let n = left.0.len() - 1;
+                for i in 0..n {
+                    if left.0[i] == UNKNOWN { left.0[i] = right.0[i]; }
                 }
+                // Sum the piggybacked change counts
+                left.0[n] = left.0[n].saturating_add(right.0[n]);
                 left
             })
             .unwrap();
-        timestamps.push(timestamp(&format!("iter_{}_reduce_labels", iter)));
+        timestamps.push(timestamp(&format!("iter_{}_reduce", iter)));
 
-        // 3. Broadcast the merged global labels back to all workers for the next iteration
-        let global_labels = if let Some(msg) = reduced_labels {
+        // 3. Single broadcast: all workers receive merged labels + total change count
+        //    (Previously this was 2 broadcasts: labels + stop signal)
+        let global = if let Some(msg) = reduced {
             middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
         } else {
             middleware.broadcast(None, ROOT_WORKER).unwrap()
         };
-        
-        // Update the write buffer with the broadcasted labels
-        write_buf.copy_from_slice(&global_labels.0);
-        
-        // Swap buffers for next iteration (no allocation, just pointer swap)
+        timestamps.push(timestamp(&format!("iter_{}_broadcast", iter)));
+
+        // Extract piggybacked convergence info
+        let total_changed = global.0[params.num_nodes as usize];
+
+        // Update write buffer with the new global labels
+        if use_a_as_read {
+            labels_b.copy_from_slice(&global.0[..params.num_nodes as usize]);
+        } else {
+            labels_a.copy_from_slice(&global.0[..params.num_nodes as usize]);
+        }
+
+        // Recycle the broadcast result's Vec as local_updates for next iteration (zero alloc)
+        local_updates = global.0;
+        local_updates.resize(extended_size, UNKNOWN);
+
         use_a_as_read = !use_a_as_read;
-        
-        timestamps.push(timestamp(&format!("iter_{}_broadcast_labels", iter)));
 
-        // 4. Check for convergence (global label change count)
-        let reduced_changed = middleware
-            .reduce(LabelsMessage(vec![local_changed]), |mut a, b| {
-                a.0[0] = a.0[0].saturating_add(b.0[0]);
-                a
-            })
-            .unwrap();
-
-        // Root worker makes the stop/continue decision
-        let should_stop = if worker == ROOT_WORKER {
-            if let Some(count_msg) = reduced_changed {
-                let total_changed = count_msg.0[0];
-                println!("[Worker {worker}] iter {iter}: changed={total_changed}");
-                !should_continue(iter, params.max_iterations, total_changed, threshold)
-            } else { false }
-        } else { false };
-
-        // Synchronize the stop signal across the cluster
-        let stop_signal = middleware.broadcast(
-            if worker == ROOT_WORKER { Some(LabelsMessage(vec![if should_stop { 1 } else { 0 }])) } else { None },
-            ROOT_WORKER
-        ).unwrap();
-
-        if stop_signal.0[0] == 1 { break; }
+        if worker == ROOT_WORKER {
+            println!("[Worker {worker}] iter {iter}: changed={total_changed}");
+        }
+        if !should_continue(iter, params.max_iterations, total_changed, threshold) {
+            break;
+        }
         iter += 1;
         timestamps.push(timestamp(&format!("iter_{}_end", iter)));
     }
