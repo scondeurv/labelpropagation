@@ -32,7 +32,8 @@ if [ $? -eq 0 ]; then
     cp "./ow-lp/exec_cluster" "./ow-lp/bin/exec"
     chmod +x "./ow-lp/bin/exec"
     rm -f "./ow-lp/exec_cluster"
-    echo "📦 Binary is ready at: ow-lp/bin/exec"
+    zip -j "./labelpropagation.zip" "./ow-lp/bin/exec"
+    echo "📦 Zip is ready"
 else
     echo "❌ Compilation failed."
     exit 1
