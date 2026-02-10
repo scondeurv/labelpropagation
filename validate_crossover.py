@@ -83,12 +83,12 @@ def run_benchmark(nodes):
     burst_time = None
     
     for line in output.split('\n'):
-        if 'Standalone Time:' in line:
+        if 'Standalone Processing Time (Execution):' in line:
             try:
                 standalone_time = float(line.split(':')[1].strip().split()[0])
             except:
                 pass
-        if 'Burst Time:' in line:
+        if 'Burst Processing Time (Distributed Span):' in line:
             try:
                 burst_time = float(line.split(':')[1].strip().split()[0])
             except:
@@ -138,9 +138,9 @@ def main():
     
     # Summary
     log("\n" + "="*80)
-    log("CROSSOVER VALIDATION SUMMARY")
+    log("CROSSOVER VALIDATION SUMMARY (PROCESSING TIME)")
     log("="*80)
-    log(f"{'Nodes':>12} {'Standalone':>12} {'Burst':>12} {'Speedup':>10} {'Winner':>12}")
+    log(f"{'Nodes':>12} {'Standalone':>12} {'Burst Span':>12} {'Speedup':>10} {'Winner':>12}")
     log("-"*80)
     
     crossover_found = False
