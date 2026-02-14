@@ -275,24 +275,32 @@ async fn load_partition_flat(
     }
 
     // Convert Edgelist to CSR format for efficient neighbor lookup
+    // Only iterates over nodes present in edges, then fixes gaps with a backward pass
     edges.sort_unstable_by_key(|e| e.0);
     let mut owned_nodes = Vec::new();
-    let mut offsets = vec![0u32; (params.num_nodes + 1) as usize];
+    // Initialize offsets to sentinel value so we can distinguish unset entries
+    let sentinel = u32::MAX;
+    let mut offsets = vec![sentinel; (params.num_nodes + 1) as usize];
     let mut flat_edges = Vec::with_capacity(edges.len());
-    let mut current_offset = 0u32;
+
     let mut edge_idx = 0;
-    for n in 0..params.num_nodes {
-        offsets[n as usize] = current_offset;
-        let mut found = false;
-        while edge_idx < edges.len() && edges[edge_idx].0 == n {
+    while edge_idx < edges.len() {
+        let node = edges[edge_idx].0;
+        offsets[node as usize] = flat_edges.len() as u32;
+        while edge_idx < edges.len() && edges[edge_idx].0 == node {
             flat_edges.push(edges[edge_idx].1);
             edge_idx += 1;
-            current_offset += 1;
-            found = true;
         }
-        if found { owned_nodes.push(n); }
+        owned_nodes.push(node);
     }
-    offsets[params.num_nodes as usize] = current_offset;
+    // Set final sentinel and backward-fill gaps so unset nodes get empty ranges
+    let total = flat_edges.len() as u32;
+    offsets[params.num_nodes as usize] = total;
+    for n in (0..params.num_nodes as usize).rev() {
+        if offsets[n] == sentinel {
+            offsets[n] = offsets[n + 1];
+        }
+    }
 
     println!("[Worker {}] Final graph size: {} owned nodes, {} edges", worker_id, owned_nodes.len(), flat_edges.len());
     if flat_edges.is_empty() {
@@ -429,7 +437,7 @@ fn label_propagation(
     let global_has_seeds = global_seeds_msg.0[0] == 1;
     
     // In unsupervised mode, each node starts with its own ID as its label
-    if !global_has_seeds && initial_labels.is_empty() {
+    if !global_has_seeds {
         println!("[Worker {}] No initial labels found globally, using unsupervised mode", worker);
         for &idx in &graph.owned_nodes {
             labels[idx as usize] = idx;
@@ -598,7 +606,7 @@ fn label_propagation(
         let mut report = String::new();
         report.push_str("\n=== Label Propagation Results ===\n");
         report.push_str(&format!("Total nodes: {}\n", params.num_nodes));
-        report.push_str(&format!("Total iterations: {}\n", iter));
+        report.push_str(&format!("Total iterations: {}\n", iter + 1));
         report.push_str("\nLabel Distribution:\n");
         let mut sorted_labels: Vec<_> = label_counts.iter().collect();
         sorted_labels.sort_by_key(|&(label, _)| label);
@@ -702,9 +710,9 @@ mod tests {
         
         // Convertir a CSR
         for node in 0..num_nodes {
+            offsets[node as usize] = flat_edges.len() as u32;
             if let Some(neighbors) = adj.get(&node) {
                 owned_nodes.push(node);
-                offsets[node as usize] = flat_edges.len() as u32;
                 flat_edges.extend_from_slice(neighbors);
             }
         }
