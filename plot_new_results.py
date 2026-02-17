@@ -7,15 +7,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 
-# Data extracted from consistency run (Processing vs Total)
+# Data extracted from verified 20-core cluster run
 # Burst Processing Time is the Distributed Span: max(worker_end) - min(worker_start)
 # Standalone Processing Time is execution_time_ms
 data = {
     'nodes': [3.0, 4.0, 4.5, 5.0, 6.0],  # Millions
-    'standalone_exec': [9.858, 13.810, 15.624, 16.980, 20.511], 
-    'standalone_total': [17.106, 23.411, 26.506, 28.940, 35.053],
-    'burst_span': [7.556, 9.492, 9.084, 9.684, 10.741],
-    'burst_total': [19.521, 23.477, 25.488, 27.443, 29.520],
+    'standalone_exec': [13.958, 18.009, 20.365, 22.221, 26.813], 
+    'standalone_total': [18.7, 24.2, 27.3, 29.9, 36.1],
+    'burst_span': [5.457, 7.152, 7.629, 7.904, 8.637],
+    'burst_total': [19.742, 22.231, 22.865, 23.836, 24.936],
 }
 
 # Derived metrics
@@ -208,7 +208,31 @@ print("="*70)
 print(f"✓ No algorithmic crossover - Burst is ALWAYS faster")
 print(f"✓ Average processing speedup: {avg_speedup_algo:.2f}x")
 print(f"✓ Speedup improves with scale: {min(data['speedup_processing']):.2f}x → {max(data['speedup_processing']):.2f}x")
-print(f"✓ Total time crossover at ~4.5M nodes (with {avg_overhead_pct:.0f}% overhead)")
+# Calculate crossover point for Total Time
+crossover_index = -1
+for i in range(len(data['nodes'])):
+    if data['burst_total'][i] < data['standalone_total'][i]:
+        crossover_index = i
+        break
+
+crossover_text = "N/A"
+if crossover_index == 0:
+    crossover_text = f"< {data['nodes'][0]}M"
+elif crossover_index > 0:
+    # Linear interpolation for better estimate
+    n1, n2 = data['nodes'][crossover_index-1], data['nodes'][crossover_index]
+    b1, b2 = data['burst_total'][crossover_index-1], data['burst_total'][crossover_index]
+    s1, s2 = data['standalone_total'][crossover_index-1], data['standalone_total'][crossover_index]
+    
+    # solve for n: b1 + (n-n1)*(b2-b1)/(n2-n1) = s1 + (n-n1)*(s2-s1)/(n2-n1)
+    # (n-n1) * [(b2-b1)/(n2-n1) - (s2-s1)/(n2-n1)] = s1 - b1
+    # n-n1 = (s1 - b1) / [(b2-b1 - (s2-s1))/(n2-n1)]
+    # n = n1 + (s1 - b1) * (n2 - n1) / (s2 - s1 - (b2 - b1))
+    
+    n_cross = n1 + (b1 - s1) * (n2 - n1) / (s2 - s1 - (b2 - b1))
+    crossover_text = f"~{n_cross:.1f}M"
+
+print(f"✓ Total time crossover at {crossover_text} nodes (with {avg_overhead_pct:.0f}% overhead)")
 print(f"✓ Burst algorithmic time remains constant: ~{np.mean(data['burst_span']):.1f}s ± {burst_time_variance:.1f}s")
 print("="*70 + "\n")
 

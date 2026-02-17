@@ -38,7 +38,7 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
         
         # Parse JSON output
         output = json.loads(result.stdout.strip())
-        return output.get("total_time_ms", 0)
+        return output.get("execution_time_ms", 0)
     except subprocess.TimeoutExpired:
         print("Error: Standalone version timed out", file=sys.stderr)
         return None
@@ -191,9 +191,9 @@ if __name__ == "__main__":
         print(f"Running standalone version...")
         lpst_time = benchmark_standalone(graph_file, args.nodes, args.iter)
         if lpst_time is not None:
-            print(f"LPST Time: {lpst_time}")
+            print(f"Standalone Processing Time (Execution): {lpst_time} ms")
         else:
-            print("LPST Time: FAILED")
+            print("Standalone Processing Time (Execution): FAILED")
     
     # Benchmark burst
     burst_time = None
@@ -213,11 +213,11 @@ if __name__ == "__main__":
         if burst_time is not None:
             print(f"Burst Time (Total): {burst_time} ms")
             if algo_time:
-                print(f"Burst Time (Algorithmic): {algo_time} ms")
+                print(f"Burst Processing Time (Distributed Span): {algo_time} ms")
                 overhead = burst_time - algo_time
                 print(f"OpenWhisk Overhead: {overhead} ms ({(overhead/burst_time)*100:.1f}%)")
         else:
-            print("Burst Time: FAILED")
+            print("Burst Processing Time (Distributed Span): FAILED")
     
     # Calculate speedup
     if lpst_time:
