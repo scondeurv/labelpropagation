@@ -30,7 +30,8 @@ def generate_large_graph(num_nodes, num_partitions, output_local, bucket=None, s
             
             # Add label for 10% of nodes (deterministic seeds)
             if i % 10 == 0 and offset == 1:
-                label = (i // (num_nodes // 4)) * 100  # 4 label groups
+                group_size = max(1, num_nodes // 4)
+                label = (i // group_size) * 100  # 4 label groups
                 edges.append(f"{src}\t{dst}\t{label}")
             else:
                 edges.append(f"{src}\t{dst}")

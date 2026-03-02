@@ -33,7 +33,7 @@ def generate_graph(nodes):
     log(f"Generating {nodes/1e6:.1f}M node graph...")
     
     result = subprocess.run([
-        ".venv/bin/python", "setup_large_lp_data.py",
+        "uv", "run", "setup_large_lp_data.py",
         "--nodes", str(nodes),
         "--partitions", str(PARTITIONS),
         "--bucket", BUCKET,
@@ -62,7 +62,7 @@ def run_benchmark(nodes):
     log(f"Running benchmark (Standalone + Burst)...")
     
     result = subprocess.run([
-        ".venv/bin/python", "benchmark_lp.py",
+        "uv", "run", "benchmark_lp.py",
         "--nodes", str(nodes),
         "--partitions", str(PARTITIONS),
         "--iter", str(MAX_ITER),

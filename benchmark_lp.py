@@ -38,7 +38,7 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
         
         # Parse JSON output
         output = json.loads(result.stdout.strip())
-        return output.get("total_time_ms", 0)
+        return output.get("execution_time_ms", 0)
     except subprocess.TimeoutExpired:
         print("Error: Standalone version timed out", file=sys.stderr)
         return None
@@ -178,6 +178,7 @@ if __name__ == "__main__":
     parser.add_argument("--skip-burst", action="store_true", help="Skip burst benchmark")
     parser.add_argument("--validate", action="store_true", help="Validate burst results against standalone")
     parser.add_argument("--s3-endpoint", default="http://minio-service.default.svc.cluster.local:9000", help="S3 endpoint for workers inside cluster")
+    parser.add_argument("--validation-endpoint", default="http://localhost:9000", help="S3 endpoint for local validation script")
     parser.add_argument("--bucket", default="test-bucket", help="S3 bucket name")
     parser.add_argument("--key-prefix", default="graphs", help="S3 key prefix")
     
@@ -191,9 +192,9 @@ if __name__ == "__main__":
         print(f"Running standalone version...")
         lpst_time = benchmark_standalone(graph_file, args.nodes, args.iter)
         if lpst_time is not None:
-            print(f"LPST Time: {lpst_time}")
+            print(f"Standalone Processing Time (Execution): {lpst_time} ms")
         else:
-            print("LPST Time: FAILED")
+            print("Standalone Processing Time (Execution): FAILED")
     
     # Benchmark burst
     burst_time = None
@@ -213,7 +214,7 @@ if __name__ == "__main__":
         if burst_time is not None:
             print(f"Burst Time (Total): {burst_time} ms")
             if algo_time:
-                print(f"Burst Time (Algorithmic): {algo_time} ms")
+                print(f"Burst Processing Time (Distributed Span): {algo_time} ms")
                 overhead = burst_time - algo_time
                 print(f"OpenWhisk Overhead: {overhead} ms ({(overhead/burst_time)*100:.1f}%)")
         else:
@@ -227,7 +228,7 @@ if __name__ == "__main__":
         
         if algo_time:
             algo_speedup = lpst_time / algo_time
-            print(f"Algorithmic Speedup: {algo_speedup:.2f}x")
+            print(f"Processing Speedup (Algorithmic): {algo_speedup:.2f}x")
             
             if algo_speedup > 1.0:
                 print("✓ Algorithmically, Burst is faster!")
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         else:
             print("\n=== Running Validation ===")
             key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-            if not run_validation(graph_file, args.nodes, args.bucket, key_prefix, args.s3_endpoint):
+            if not run_validation(graph_file, args.nodes, args.bucket, key_prefix, args.validation_endpoint):
                 print("\n✗ VALIDATION FAILED - Results do not match!")
                 sys.exit(1)
             print("\n✓ VALIDATION PASSED - Results match!")
