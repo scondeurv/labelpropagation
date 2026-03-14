@@ -1,15 +1,45 @@
 #!/bin/bash
 
-# Get the absolute path of the project root
-export IMAGE="burstcomputing/runtime-rust-burst:latest"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ACTION_DIR="$SCRIPT_DIR/ow-lp"
+
+if [ -d "$SCRIPT_DIR/burst-communication-middleware" ]; then
+    MIDDLEWARE_DIR="$SCRIPT_DIR/burst-communication-middleware"
+elif [ -d "$SCRIPT_DIR/../burst-communication-middleware" ]; then
+    MIDDLEWARE_DIR="$SCRIPT_DIR/../burst-communication-middleware"
+else
+    echo "❌ Could not find burst-communication-middleware."
+    echo "   Checked:"
+    echo "   - $SCRIPT_DIR/burst-communication-middleware"
+    echo "   - $SCRIPT_DIR/../burst-communication-middleware"
+    exit 1
+fi
+
+IMAGE="burstcomputing/runtime-rust-burst:latest"
+
+if ! command -v docker >/dev/null 2>&1; then
+    echo "❌ docker is not installed or not in PATH."
+    exit 1
+fi
+
+if [ ! -d "$ACTION_DIR" ]; then
+    echo "❌ Missing action directory: $ACTION_DIR"
+    exit 1
+fi
 
 echo "🚀 Starting compilation of Label Propagation action using cluster-identical environment..."
+echo "   Action dir:      $ACTION_DIR"
+echo "   Middleware dir:  $MIDDLEWARE_DIR"
 
 docker run --rm --entrypoint="" \
-    -v "./ow-lp":/tmp/input_actions \
-    -v "../burst-communication-middleware":/tmp/input_middleware \
+    -v "$ACTION_DIR":/tmp/input_actions \
+    -v "$MIDDLEWARE_DIR":/tmp/input_middleware \
     "$IMAGE" \
     /bin/bash -c "
+        set -euo pipefail
+
         # 1. Prepare isolated source folders (avoiding mount point busy errors)
         cp -r /tmp/input_actions /tmp/actions_src
         cp -r /tmp/input_middleware /tmp/middleware_src
@@ -23,18 +53,21 @@ docker run --rm --entrypoint="" \
         python3 /usr/bin/compile.py main /tmp/actions_src /tmp
         
         # 4. Copy the resulting binary back to the mount
+        if [ ! -f /tmp/exec ]; then
+            echo '❌ compile.py finished without producing /tmp/exec'
+            exit 1
+        fi
         cp /tmp/exec /tmp/input_actions/exec_cluster
     "
 
-if [ $? -eq 0 ]; then
-    echo "✅ Compilation successful!"
-    mkdir -p "./ow-lp/bin"
-    cp "./ow-lp/exec_cluster" "./ow-lp/bin/exec"
-    chmod +x "./ow-lp/bin/exec"
-    rm -f "./ow-lp/exec_cluster"
-    zip -j "./labelpropagation.zip" "./ow-lp/bin/exec"
-    echo "📦 Zip is ready"
-else
-    echo "❌ Compilation failed."
+echo "✅ Compilation successful!"
+mkdir -p "$ACTION_DIR/bin"
+if [ ! -f "$ACTION_DIR/exec_cluster" ]; then
+    echo "❌ Missing compiled binary: $ACTION_DIR/exec_cluster"
     exit 1
 fi
+cp "$ACTION_DIR/exec_cluster" "$ACTION_DIR/bin/exec"
+chmod +x "$ACTION_DIR/bin/exec"
+rm -f "$ACTION_DIR/exec_cluster"
+zip -j "$SCRIPT_DIR/labelpropagation.zip" "$ACTION_DIR/bin/exec"
+echo "📦 Zip is ready: $SCRIPT_DIR/labelpropagation.zip"
