@@ -1,215 +1,259 @@
 #!/usr/bin/env python3
 """
-Generate comprehensive plots from the crossover validation results
+Generate comprehensive Label Propagation benchmark analysis plots.
+
+Reads data from crossover_validation_results.json.
+
+Outputs:
+  lp_comprehensive_analysis.png   – 3×2 multi-panel figure
+  lp_crossover_analysis.png       – dedicated crossover figure
 """
+import json
+import os
+import sys
 
-import matplotlib.pyplot as plt
-import numpy as np
-from pathlib import Path
+try:
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from scipy import stats as sp_stats
+    HAS_SCIPY = True
+except ImportError:
+    HAS_SCIPY = False
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+    except ImportError:
+        print("matplotlib / numpy not available. Install with: pip install matplotlib numpy")
+        sys.exit(1)
 
-# Data extracted from consistency run (Processing vs Total)
-# Burst Processing Time is the Distributed Span: max(worker_end) - min(worker_start)
-# Standalone Processing Time is execution_time_ms
-data = {
-    'nodes': [3.0, 4.0, 4.5, 5.0, 6.0],  # Millions
-    'standalone_exec': [9.858, 13.810, 15.624, 16.980, 20.511], 
-    'standalone_total': [17.106, 23.411, 26.506, 28.940, 35.053],
-    'burst_span': [7.556, 9.492, 9.084, 9.684, 10.741],
-    'burst_total': [19.521, 23.477, 25.488, 27.443, 29.520],
-}
 
-# Derived metrics
-data['speedup_processing'] = [s / b for s, b in zip(data['standalone_exec'], data['burst_span'])]
-data['speedup_total'] = [s / b for s, b in zip(data['standalone_total'], data['burst_total'])]
-data['overhead'] = [t - s for t, s in zip(data['burst_total'], data['burst_span'])]
+def load_results(json_path: str = "crossover_validation_results.json") -> tuple[list, dict, float | None]:
+    if not os.path.exists(json_path):
+        print(f"Error: {json_path} not found.")
+        print("Run the crossover validation first to generate the data.")
+        sys.exit(1)
 
-# Create figure with subplots
-fig = plt.figure(figsize=(16, 12))
-gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.3)
+    with open(json_path) as f:
+        data = json.load(f)
 
-# 1. Execution Time Comparison
-ax1 = fig.add_subplot(gs[0, 0])
-ax1.plot(data['nodes'], data['standalone_total'], 'o--', linewidth=1, markersize=6, 
-         label='Standalone (Total)', color='#2E86AB', alpha=0.5)
-ax1.plot(data['nodes'], data['standalone_exec'], 'o-', linewidth=2, markersize=8, 
-         label='Standalone (Processing)', color='#2E86AB')
-ax1.plot(data['nodes'], data['burst_span'], 's-', linewidth=2, markersize=8,
-         label='Burst (Processing Span)', color='#A23B72')
-ax1.plot(data['nodes'], data['burst_total'], '^--', linewidth=1, markersize=6,
-         label='Burst (Total Orchestrator)', color='#F18F01', alpha=0.4)
-ax1.set_xlabel('Graph Size (Million Nodes)', fontsize=12)
-ax1.set_ylabel('Execution Time (seconds)', fontsize=12)
-ax1.set_title('Processing Time: Standalone vs Burst Span', fontsize=14, fontweight='bold')
-ax1.legend(fontsize=10)
-ax1.grid(True, alpha=0.3)
+    results = data.get("results", [])
+    if not results:
+        print("Error: no results in JSON file.")
+        sys.exit(1)
 
-# 2. Speedup Comparison
-ax2 = fig.add_subplot(gs[0, 1])
-ax2.plot(data['nodes'], data['speedup_processing'], 'o-', linewidth=2, markersize=8,
-         label='Processing Speedup', color='#06A77D')
-ax2.plot(data['nodes'], data['speedup_total'], 's-', linewidth=2, markersize=8,
-         label='End-to-End Speedup', color='#F18F01', alpha=0.7)
-ax2.axhline(y=1.0, color='red', linestyle='--', linewidth=1, alpha=0.5, label='No Speedup (1.0x)')
-ax2.set_xlabel('Graph Size (Million Nodes)', fontsize=12)
-ax2.set_ylabel('Speedup Factor', fontsize=12)
-ax2.set_title('Burst vs Standalone Speedup', fontsize=14, fontweight='bold')
-ax2.legend(fontsize=10)
-ax2.grid(True, alpha=0.3)
+    config = data.get("configuration", {})
+    crossover_estimate = data.get("crossover_estimate")
+    return results, config, crossover_estimate
 
-# 3. OpenWhisk Overhead
-ax3 = fig.add_subplot(gs[1, 0])
-overhead_pct = [oh / total * 100 for oh, total in zip(data['overhead'], data['burst_total'])]
-bars = ax3.bar(data['nodes'], data['overhead'], width=0.3, color='#D62828', alpha=0.7)
-ax3.set_xlabel('Graph Size (Million Nodes)', fontsize=12)
-ax3.set_ylabel('Overhead Time (seconds)', fontsize=12)
-ax3.set_title('OpenWhisk Infrastructure Overhead', fontsize=14, fontweight='bold')
-# Add percentage labels on bars
-for i, (bar, pct) in enumerate(zip(bars, overhead_pct)):
-    height = bar.get_height()
-    ax3.text(bar.get_x() + bar.get_width()/2., height,
-             f'{pct:.1f}%', ha='center', va='bottom', fontsize=9)
-ax3.grid(True, alpha=0.3, axis='y')
 
-# 4. Throughput (nodes/second)
-ax4 = fig.add_subplot(gs[1, 1])
-nodes_absolute = [n * 1e6 for n in data['nodes']]
-throughput_standalone = [n / t for n, t in zip(nodes_absolute, data['standalone_exec'])]
-throughput_burst = [n / t for n, t in zip(nodes_absolute, data['burst_span'])]
-ax4.plot(data['nodes'], [t/1000 for t in throughput_standalone], 'o-', linewidth=2, 
-         markersize=8, label='Standalone', color='#2E86AB')
-ax4.plot(data['nodes'], [t/1000 for t in throughput_burst], 's-', linewidth=2,
-         markersize=8, label='Burst', color='#A23B72')
-ax4.set_xlabel('Graph Size (Million Nodes)', fontsize=12)
-ax4.set_ylabel('Throughput (K nodes/sec)', fontsize=12)
-ax4.set_title('Processing Throughput', fontsize=14, fontweight='bold')
-ax4.legend(fontsize=10)
-ax4.grid(True, alpha=0.3)
+def _fmt_node_count(n):
+    return f"{n / 1e6:.1f}M" if n >= 1_000_000 else f"{n / 1e3:.0f}K" if n >= 1000 else str(n)
 
-# 5. Linear Regression Analysis for Standalone
-ax5 = fig.add_subplot(gs[2, 0])
-# Fit linear model for standalone
-z = np.polyfit(data['nodes'], data['standalone_exec'], 1)
-p = np.poly1d(z)
-r_squared = 1 - (sum((np.array(data['standalone_exec']) - p(np.array(data['nodes'])))**2) / 
-                 sum((np.array(data['standalone_exec']) - np.mean(data['standalone_exec']))**2))
 
-ax5.scatter(data['nodes'], data['standalone_exec'], s=100, alpha=0.6, color='#2E86AB')
-x_fit = np.linspace(min(data['nodes']), max(data['nodes']), 100)
-ax5.plot(x_fit, p(x_fit), 'r--', linewidth=2, 
-         label=f'y = {z[0]:.2f}x + {z[1]:.2f}\nR² = {r_squared:.4f}')
-ax5.set_xlabel('Graph Size (Million Nodes)', fontsize=12)
-ax5.set_ylabel('Standalone Processing Time (seconds)', fontsize=12)
-ax5.set_title('Standalone Processing Linear Scaling', fontsize=14, fontweight='bold')
-ax5.legend(fontsize=10)
-ax5.grid(True, alpha=0.3)
+def plot_comprehensive(results: list, crossover_estimate: float | None, config: dict) -> None:
+    nodes = np.array([r["nodes"] for r in results])
+    sa_exec = np.array([r["standalone_ms"] for r in results], dtype=float)
+    bs_span = np.array([r["burst_ms"] for r in results], dtype=float)
 
-# 6. Summary Statistics Table
-ax6 = fig.add_subplot(gs[2, 1])
-ax6.axis('off')
+    has_burst_total = all(r.get("burst_total_ms") is not None for r in results)
+    has_sa_total = all(r.get("standalone_total_ms") is not None for r in results)
+    has_total_speedup = has_burst_total and has_sa_total
 
-# Calculate statistics
-avg_speedup_algo = np.mean(data['speedup_processing'])
-avg_speedup_total = np.mean(data['speedup_total'])
-avg_overhead_pct = np.mean(overhead_pct)
-burst_time_variance = np.std(data['burst_span'])
+    bs_total = np.array([r["burst_total_ms"] for r in results], dtype=float) if has_burst_total else None
+    sa_total = np.array([r["standalone_total_ms"] for r in results], dtype=float) if has_sa_total else None
 
-summary_text = f"""
-SUMMARY STATISTICS
-{'='*50}
+    sa_std = np.array([r.get("standalone_std_ms", 0.0) for r in results], dtype=float)
+    bs_std = np.array([r.get("burst_std_ms", 0.0) for r in results], dtype=float)
 
-Algorithmic Speedup:
-  • Average:    {avg_speedup_algo:.2f}x
-  • Range:      {min(data['speedup_processing']):.2f}x - {max(data['speedup_processing']):.2f}x
-  • Burst ALWAYS faster algorithmically
+    speedup_algo = sa_exec / bs_span
+    speedup_total = (sa_total / bs_total) if has_total_speedup else None
+    overhead_ms = (bs_total - bs_span) if has_burst_total else None
+    overhead_pct = (overhead_ms / bs_total * 100) if has_burst_total else None
 
-Total Speedup (with overhead):
-  • Average:    {avg_speedup_total:.2f}x  
-  • Range:      {min(data['speedup_total']):.2f}x - {max(data['speedup_total']):.2f}x
-  • Crossover at ~4.5M nodes
+    nodes_m = nodes / 1e6
+    sa_throughput = nodes / sa_exec * 1000
+    bs_throughput = nodes / bs_span * 1000
 
-Infrastructure Overhead:
-  • Average:    {avg_overhead_pct:.1f}% of total time
-  • Range:      {min(overhead_pct):.1f}% - {max(overhead_pct):.1f}%
+    fig, axes = plt.subplots(2, 3, figsize=(18, 11))
+    fig.suptitle(
+        "Label Propagation Benchmark: Standalone vs Burst\n"
+        f"Config: {config.get('partitions', '?')} partitions, "
+        f"max_iter={config.get('max_iter', '?')}, "
+        f"memory={config.get('memory_mb', '?')}MB",
+        fontsize=13,
+        fontweight="bold",
+    )
 
-Burst Algorithmic Time:
-  • Average:    {np.mean(data['burst_span']):.2f}s
-  • Std Dev:    {burst_time_variance:.2f}s
-  • Relatively constant (parallel efficiency)
+    colours = {"standalone": "#2196F3", "burst": "#F44336", "overhead": "#FF9800", "speedup": "#9C27B0"}
 
-Standalone Scaling:
-  • Linear rate: {z[0]:.2f} sec/M nodes
-  • R² = {r_squared:.4f} (excellent fit)
-"""
+    ax = axes[0, 0]
+    sa_yerr = sa_std / 1000 if sa_std.any() else None
+    bs_yerr = bs_std / 1000 if bs_std.any() else None
+    ax.errorbar(nodes_m, sa_exec / 1000, yerr=sa_yerr, fmt="o-", color=colours["standalone"], lw=2, capsize=4, label="Standalone execution")
+    ax.errorbar(nodes_m, bs_span / 1000, yerr=bs_yerr, fmt="s-", color=colours["burst"], lw=2, capsize=4, label="Burst distributed span")
+    if crossover_estimate:
+        ax.axvline(crossover_estimate / 1e6, color="green", ls=":", lw=1.5, label=f"Crossover ~{crossover_estimate/1e6:.1f}M")
+    ax.set_xlabel("Graph size (M nodes)")
+    ax.set_ylabel("Time (s)")
+    ax.set_title("Processing Time (Algorithmic)")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
 
-ax6.text(0.05, 0.95, summary_text, transform=ax6.transAxes,
-         fontsize=10, verticalalignment='top', family='monospace',
-         bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
+    ax = axes[0, 1]
+    ax.plot(nodes_m, speedup_algo, "D-", color=colours["speedup"], lw=2, label="Algorithmic speedup")
+    if speedup_total is not None:
+        ax.plot(nodes_m, speedup_total, "^--", color="gray", lw=1.5, label="Total speedup")
+    ax.axhline(1.0, color="black", ls="--", lw=1, alpha=0.6)
+    if crossover_estimate:
+        ax.axvline(crossover_estimate / 1e6, color="green", ls=":", lw=1.5)
+    ax.set_xlabel("Graph size (M nodes)")
+    ax.set_ylabel("Speedup (Standalone / Burst)")
+    ax.set_title("Speedup")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
 
-# Overall title
-fig.suptitle('Label Propagation: Burst vs Standalone Performance Analysis', 
-             fontsize=16, fontweight='bold', y=0.98)
+    ax = axes[0, 2]
+    if overhead_pct is not None:
+        bars = ax.bar(nodes_m, overhead_pct, color=colours["overhead"], alpha=0.85, width=float(nodes_m[0]) * 0.35 if len(nodes_m) > 0 else 0.1)
+        for bar, pct, ov in zip(bars, overhead_pct, overhead_ms):
+            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                    f"{ov/1000:.0f}s\n{pct:.0f}%", ha="center", va="bottom", fontsize=7.5)
+        ax.set_xlabel("Graph size (M nodes)")
+        ax.set_ylabel("Infrastructure overhead (%)")
+        ax.set_title("OpenWhisk Overhead")
+        ax.set_xticks(nodes_m)
+        ax.set_xticklabels([_fmt_node_count(n) for n in nodes], fontsize=8)
+        ax.grid(True, alpha=0.3, axis="y")
+    else:
+        ax.axis("off")
+        ax.text(0.5, 0.5, "No measured burst total metrics\n(overhead panel hidden)", ha="center", va="center", fontsize=10)
+        ax.set_title("OpenWhisk Overhead")
 
-# Save figure
-plt.savefig('comprehensive_analysis.png', dpi=300, bbox_inches='tight')
-print("✅ Saved: comprehensive_analysis.png")
+    ax = axes[1, 0]
+    ax.plot(nodes_m, sa_throughput / 1e6, "o-", color=colours["standalone"], lw=2, label="Standalone (M nodes/s)")
+    ax.plot(nodes_m, bs_throughput / 1e6, "s-", color=colours["burst"], lw=2, label="Burst span (M nodes/s)")
+    ax.set_xlabel("Graph size (M nodes)")
+    ax.set_ylabel("Throughput (M nodes/s)")
+    ax.set_title("Throughput")
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3)
 
-# Create a second figure focused on crossover analysis
-fig2, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    ax = axes[1, 1]
+    ax.scatter(nodes_m, sa_exec / 1000, color=colours["standalone"], s=60, zorder=5)
+    if HAS_SCIPY and len(nodes) >= 2:
+        slope, intercept, r2, *_ = sp_stats.linregress(nodes, sa_exec)
+        x_fit = np.linspace(nodes[0], nodes[-1] * 1.15, 100)
+        y_fit = (slope * x_fit + intercept) / 1000
+        ax.plot(x_fit / 1e6, y_fit, "--", color=colours["standalone"], alpha=0.7,
+                label=f"Linear fit (R²={r2**2:.4f})\n{slope/1000*1e6:.2f} s/M nodes")
+        ax.legend(fontsize=9)
+    elif len(nodes) >= 2:
+        m = (sa_exec[-1] - sa_exec[0]) / (nodes[-1] - nodes[0])
+        b = sa_exec[0] - m * nodes[0]
+        x_fit = np.linspace(nodes[0], nodes[-1] * 1.15, 100)
+        ax.plot(x_fit / 1e6, (m * x_fit + b) / 1000, "--", color=colours["standalone"], alpha=0.7)
+    ax.set_xlabel("Graph size (M nodes)")
+    ax.set_ylabel("Standalone execution time (s)")
+    ax.set_title("Standalone Scaling (Linear)")
+    ax.grid(True, alpha=0.3)
 
-# Crossover plot - Total time
-ax1.plot(data['nodes'], data['standalone_total'], 'o-', linewidth=2.5, markersize=10,
-         label='Standalone', color='#2E86AB')
-ax1.plot(data['nodes'], data['burst_total'], 's-', linewidth=2.5, markersize=10,
-         label='Burst (Total)', color='#F18F01')
-ax1.axvline(x=4.0, color='green', linestyle='--', linewidth=2, alpha=0.5, 
-            label='Crossover Point (~4.0M)')
-ax1.set_xlabel('Graph Size (Million Nodes)', fontsize=13)
-ax1.set_ylabel('Total Execution Time (seconds)', fontsize=13)
-ax1.set_title('Crossover Point Analysis\n(Including Infrastructure Overhead)', 
-              fontsize=14, fontweight='bold')
-ax1.legend(fontsize=11)
-ax1.grid(True, alpha=0.3)
-ax1.fill_between([3, 4.0], 0, 40, alpha=0.15, color='orange', 
-                  label='Standalone wins')
-ax1.fill_between([4.0, 6], 0, 40, alpha=0.15, color='green',
-                  label='Burst wins')
+    ax = axes[1, 2]
+    ax.axis("off")
+    table_data = []
+    headers = ["Nodes", "SA exec (s)", "Burst span (s)", "Speedup", "Winner"]
+    for r in results:
+        sa = r["standalone_ms"] / 1000
+        bs = r["burst_ms"] / 1000
+        sp = sa / bs if bs > 0 else 0
+        table_data.append([
+            _fmt_node_count(r["nodes"]),
+            f"{sa:.2f}",
+            f"{bs:.2f}",
+            f"{sp:.2f}x",
+            "Burst ✓" if sp > 1.0 else "Standalone",
+        ])
+    if crossover_estimate:
+        table_data.append([f"~{crossover_estimate/1e6:.2f}M", "≈", "≈", "1.00x", "CROSSOVER"])
 
-# Speedup over scale
-ax2.plot(data['nodes'], data['speedup_processing'], 'o-', linewidth=2.5, markersize=10,
-         label='Algorithmic Speedup', color='#06A77D')
-ax2.axhline(y=1.0, color='red', linestyle='--', linewidth=2, alpha=0.5)
-ax2.fill_between(data['nodes'], 1, data['speedup_processing'], alpha=0.2, color='green')
-ax2.set_xlabel('Graph Size (Million Nodes)', fontsize=13)
-ax2.set_ylabel('Speedup Factor (vs Standalone)', fontsize=13)
-ax2.set_title('Algorithmic Speedup Trend\n(Pure Execution Time)', 
-              fontsize=14, fontweight='bold')
-ax2.legend(fontsize=11)
-ax2.grid(True, alpha=0.3)
-ax2.text(4.5, 2.5, f'Avg: {avg_speedup_algo:.2f}x', fontsize=12, 
-         bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.3))
+    tbl = ax.table(cellText=table_data, colLabels=headers, loc="center", cellLoc="center")
+    tbl.auto_set_font_size(False)
+    tbl.set_fontsize(9)
+    tbl.scale(1.15, 1.6)
+    ax.set_title("Results Summary", fontweight="bold", pad=10)
 
-plt.tight_layout()
-plt.savefig('crossover_analysis.png', dpi=300, bbox_inches='tight')
-print("✅ Saved: crossover_analysis.png")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    out = "lp_comprehensive_analysis.png"
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"✅ Saved: {out}")
+    plt.close()
 
-# Print summary to console
-print("\n" + "="*70)
-print("CROSSOVER VALIDATION RESULTS (CONSISTENCY CHECK)")
-print("="*70)
-print(f"\n{'Nodes (M)':<12} {'Standalone (Proc)':<20} {'Burst (Span)':<15} {'Speedup':<10}")
-print("-"*70)
-for i in range(len(data['nodes'])):
-    print(f"{data['nodes'][i]:<12.1f} {data['standalone_exec'][i]:<20.2f} "
-          f"{data['burst_span'][i]:<15.2f} {data['speedup_processing'][i]:<10.2f}x")
 
-print("\n" + "="*70)
-print("KEY FINDINGS:")
-print("="*70)
-print(f"✓ No algorithmic crossover - Burst is ALWAYS faster")
-print(f"✓ Average processing speedup: {avg_speedup_algo:.2f}x")
-print(f"✓ Speedup improves with scale: {min(data['speedup_processing']):.2f}x → {max(data['speedup_processing']):.2f}x")
-print(f"✓ Total time crossover at ~4.5M nodes (with {avg_overhead_pct:.0f}% overhead)")
-print(f"✓ Burst algorithmic time remains constant: ~{np.mean(data['burst_span']):.1f}s ± {burst_time_variance:.1f}s")
-print("="*70 + "\n")
+def plot_crossover(results: list, crossover_estimate: float | None) -> None:
+    nodes = np.array([r["nodes"] for r in results])
+    sa_exec = np.array([r["standalone_ms"] for r in results], dtype=float)
+    bs_span = np.array([r["burst_ms"] for r in results], dtype=float)
+    sa_std = np.array([r.get("standalone_std_ms", 0.0) for r in results], dtype=float)
+    bs_std = np.array([r.get("burst_std_ms", 0.0) for r in results], dtype=float)
+    speedup = sa_exec / bs_span
+    nodes_m = nodes / 1e6
 
-plt.show()
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle("Label Propagation Crossover Point Analysis", fontsize=13, fontweight="bold")
+
+    sa_yerr = sa_std / 1000 if sa_std.any() else None
+    bs_yerr = bs_std / 1000 if bs_std.any() else None
+    ax1.errorbar(nodes_m, sa_exec / 1000, yerr=sa_yerr, fmt="o-", color="#2196F3", lw=2, ms=8, capsize=5, label="Standalone execution")
+    ax1.errorbar(nodes_m, bs_span / 1000, yerr=bs_yerr, fmt="s-", color="#F44336", lw=2, ms=8, capsize=5, label="Burst distributed span")
+    if crossover_estimate:
+        cx = crossover_estimate / 1e6
+        ax1.axvline(cx, color="green", ls="-.", lw=2, label=f"Crossover: {cx:.2f}M nodes")
+        ax1.axvspan(0, cx, alpha=0.04, color="blue")
+        ax1.axvspan(cx, nodes_m[-1] * 1.05, alpha=0.04, color="red")
+    ax1.set_xlabel("Graph size (M nodes)")
+    ax1.set_ylabel("Time (s)")
+    ax1.set_title("Execution Time vs Graph Size")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(nodes_m, speedup, "D-", color="#9C27B0", lw=2, ms=8, label="Algorithmic speedup")
+    ax2.axhline(1.0, color="black", ls="--", alpha=0.7, label="Speedup = 1.0 (crossover)")
+    if crossover_estimate:
+        cx = crossover_estimate / 1e6
+        ax2.axvline(cx, color="green", ls="-.", lw=2)
+        ax2.axvspan(0, cx, alpha=0.06, color="blue", label="Standalone region")
+        ax2.axvspan(cx, nodes_m[-1] * 1.05, alpha=0.06, color="red", label="Burst region")
+    ax2.set_xlabel("Graph size (M nodes)")
+    ax2.set_ylabel("Speedup (Standalone exec / Burst span)")
+    ax2.set_title("Algorithmic Speedup Trend")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    out = "lp_crossover_analysis.png"
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    print(f"✅ Saved: {out}")
+    plt.close()
+
+
+def main():
+    json_path = "crossover_validation_results.json"
+    if len(sys.argv) > 1:
+        json_path = sys.argv[1]
+
+    results, config, crossover_estimate = load_results(json_path)
+
+    print(f"Loaded {len(results)} data points from {json_path}")
+    if crossover_estimate:
+        print(f"Crossover estimate: {crossover_estimate / 1e6:.2f}M nodes")
+
+    plot_comprehensive(results, crossover_estimate, config)
+    plot_crossover(results, crossover_estimate)
+    print("✅ All plots generated.")
+
+
+if __name__ == "__main__":
+    main()
