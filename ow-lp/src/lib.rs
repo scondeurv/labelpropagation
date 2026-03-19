@@ -568,8 +568,8 @@ fn label_propagation(
         if !should_continue(iter, params.max_iterations, total_changed, threshold) {
             break;
         }
-        iter += 1;
         timestamps.push(timestamp(&format!("iter_{}_end", iter)));
+        iter += 1;
     }
 
     timestamps.push(timestamp("worker_end"));
