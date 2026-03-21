@@ -4,6 +4,7 @@ Validate crossover point with targeted benchmarks around 4.37M nodes
 """
 import subprocess
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -20,8 +21,9 @@ TEST_POINTS = [
 PARTITIONS = 4
 MAX_ITER = 10
 MEMORY = 4096
-S3_ENDPOINT = "http://minio-service.default.svc.cluster.local:9000"
-BUCKET = "test-bucket"
+WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-service.default.svc.cluster.local:9000")
+BUCKET = os.environ.get("S3_BUCKET", "test-bucket")
+HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
 
 def log(message):
     """Print with timestamp"""
@@ -37,7 +39,7 @@ def generate_graph(nodes):
         "--nodes", str(nodes),
         "--partitions", str(PARTITIONS),
         "--bucket", BUCKET,
-        "--endpoint", "http://localhost:9000",  # From host
+        "--endpoint", HOST_S3_ENDPOINT,  # From host
         "--density", "20"
     ], capture_output=True, text=True, timeout=600)
     
@@ -67,7 +69,7 @@ def run_benchmark(nodes):
         "--partitions", str(PARTITIONS),
         "--iter", str(MAX_ITER),
         "--memory", str(MEMORY),
-        "--s3-endpoint", S3_ENDPOINT,
+        "--s3-endpoint", WORKER_S3_ENDPOINT,
         "--bucket", BUCKET
     ], capture_output=True, text=True, timeout=1200)
     
