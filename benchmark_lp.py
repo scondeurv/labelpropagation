@@ -11,6 +11,9 @@ from ow_client.openwhisk_executor import OpenwhiskExecutor
 from ow_client.time_helper import get_millis
 from labelpropagation_utils import generate_payload
 
+DEFAULT_WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-service.default.svc.cluster.local:9000")
+DEFAULT_HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
+
 def benchmark_standalone(graph_file, num_nodes, max_iter):
     """Run standalone Label Propagation and return execution time in ms"""
     binary_path = "lpst/target/release/label-propagation"
@@ -177,8 +180,8 @@ if __name__ == "__main__":
     parser.add_argument("--skip-standalone", action="store_true", help="Skip standalone benchmark")
     parser.add_argument("--skip-burst", action="store_true", help="Skip burst benchmark")
     parser.add_argument("--validate", action="store_true", help="Validate burst results against standalone")
-    parser.add_argument("--s3-endpoint", default="http://minio-service.default.svc.cluster.local:9000", help="S3 endpoint for workers inside cluster")
-    parser.add_argument("--validation-endpoint", default="http://localhost:9000", help="S3 endpoint for local validation script")
+    parser.add_argument("--s3-endpoint", default=DEFAULT_WORKER_S3_ENDPOINT, help="S3 endpoint for workers inside cluster")
+    parser.add_argument("--validation-endpoint", default=DEFAULT_HOST_S3_ENDPOINT, help="S3 endpoint for local validation script")
     parser.add_argument("--bucket", default="test-bucket", help="S3 bucket name")
     parser.add_argument("--key-prefix", default="graphs", help="S3 key prefix")
     
