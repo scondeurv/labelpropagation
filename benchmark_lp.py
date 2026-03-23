@@ -15,7 +15,7 @@ DEFAULT_WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-
 DEFAULT_HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
 
 def benchmark_standalone(graph_file, num_nodes, max_iter):
-    """Run standalone Label Propagation and return execution time in ms"""
+    """Run standalone Label Propagation and return the full output dict."""
     binary_path = "lpst/target/release/label-propagation"
     
     if not os.path.exists(binary_path):
@@ -41,7 +41,7 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
         
         # Parse JSON output
         output = json.loads(result.stdout.strip())
-        return output.get("execution_time_ms", 0)
+        return output
     except subprocess.TimeoutExpired:
         print("Error: Standalone version timed out", file=sys.stderr)
         return None
@@ -53,7 +53,7 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
         print(f"Error: {e}", file=sys.stderr)
         return None
 
-def run_validation(graph_file, num_nodes, bucket, key, endpoint):
+def run_validation(graph_file, num_nodes, max_iter, bucket, key, endpoint):
     """Run validation comparing standalone vs burst results"""
     import subprocess
     
@@ -63,7 +63,7 @@ def run_validation(graph_file, num_nodes, bucket, key, endpoint):
     binary_path = "lpst/target/release/label-propagation"
     try:
         result = subprocess.run(
-            [binary_path, graph_file, str(num_nodes), "50"],
+            [binary_path, graph_file, str(num_nodes), str(max_iter)],
             capture_output=True,
             text=True,
             timeout=600
@@ -80,7 +80,7 @@ def run_validation(graph_file, num_nodes, bucket, key, endpoint):
     
     # Run validation script
     val_result = subprocess.run([
-        "python3", "validate_results.py",
+        sys.executable, "validate_results.py",
         "--standalone", standalone_output,
         "--graph", graph_file,
         "--bucket", bucket,
@@ -97,15 +97,26 @@ def run_validation(graph_file, num_nodes, bucket, key, endpoint):
     
     return True
 
-def benchmark_burst(num_nodes, num_partitions, max_iter, memory_mb, granularity=1, ow_host="localhost", ow_port=31001, s3_endpoint="http://minio-service.default.svc.cluster.local:9000"):
+def benchmark_burst(
+    num_nodes,
+    num_partitions,
+    max_iter,
+    memory_mb,
+    granularity=1,
+    ow_host="localhost",
+    ow_port=31001,
+    s3_endpoint="http://minio-service.default.svc.cluster.local:9000",
+    bucket="test-bucket",
+    key_prefix="graphs",
+):
     """Run burst Label Propagation and return execution time in ms"""
-    s3_prefix = f"graphs/large-{num_nodes}"
+    s3_prefix = f"{key_prefix}/large-{num_nodes}"
     
     params = generate_payload(
         endpoint=s3_endpoint,
         partitions=num_partitions,
         num_nodes=num_nodes,
-        bucket="test-bucket",
+        bucket=bucket,
         key=s3_prefix,
         convergence_threshold=0,
         max_iterations=max_iter,
@@ -123,7 +134,7 @@ def benchmark_burst(num_nodes, num_partitions, max_iter, memory_mb, granularity=
             memory=memory_mb,
             custom_image="burstcomputing/runtime-rust-burst:latest",
             debug_mode=True,
-            burst_size=1,
+            burst_size=granularity,
             join=False,
             backend="redis-list",
             chunk_size=1024,
@@ -139,7 +150,8 @@ def benchmark_burst(num_nodes, num_partitions, max_iter, memory_mb, granularity=
             return None, None
         
         # Calculate algorithmic time from worker timestamps
-        worker_starts = []
+        algo_starts = []
+        data_ready = []
         worker_ends = []
         
         for r in results:
@@ -154,14 +166,19 @@ def benchmark_burst(num_nodes, num_partitions, max_iter, memory_mb, granularity=
                     print(worker_data["results"])
                 
                 ts_map = {ts["key"]: int(ts["value"]) for ts in worker_data["timestamps"]}
-                if "worker_start" in ts_map:
-                    worker_starts.append(ts_map["worker_start"])
+                if "iter_0_start" in ts_map:
+                    algo_starts.append(ts_map["iter_0_start"])
+                if "get_input_end" in ts_map:
+                    data_ready.append(ts_map["get_input_end"])
                 if "worker_end" in ts_map:
                     worker_ends.append(ts_map["worker_end"])
         
         algo_time = None
-        if worker_starts and worker_ends:
-            algo_time = max(worker_ends) - min(worker_starts)
+        if worker_ends:
+            if algo_starts:
+                algo_time = max(worker_ends) - min(algo_starts)
+            elif data_ready:
+                algo_time = max(worker_ends) - min(data_ready)
             
         return (finished - host_submit), algo_time
     except Exception as e:
@@ -190,11 +207,13 @@ if __name__ == "__main__":
     graph_file = f"large_{args.nodes}.txt"
     
     # Benchmark standalone
+    standalone_output = None
     lpst_time = None
     if not args.skip_standalone:
         print(f"Running standalone version...")
-        lpst_time = benchmark_standalone(graph_file, args.nodes, args.iter)
-        if lpst_time is not None:
+        standalone_output = benchmark_standalone(graph_file, args.nodes, args.iter)
+        if standalone_output is not None:
+            lpst_time = standalone_output.get("execution_time_ms", 0)
             print(f"Standalone Processing Time (Execution): {lpst_time} ms")
         else:
             print("Standalone Processing Time (Execution): FAILED")
@@ -212,7 +231,9 @@ if __name__ == "__main__":
             args.granularity,
             args.ow_host,
             args.ow_port,
-            args.s3_endpoint
+            args.s3_endpoint,
+            args.bucket,
+            args.key_prefix,
         )
         if burst_time is not None:
             print(f"Burst Time (Total): {burst_time} ms")
@@ -226,7 +247,8 @@ if __name__ == "__main__":
     # Calculate speedup
     if lpst_time:
         if burst_time:
-            speedup = lpst_time / burst_time
+            standalone_total = standalone_output.get("total_time_ms", lpst_time) if standalone_output else lpst_time
+            speedup = standalone_total / burst_time
             print(f"\nOverall Speedup: {speedup:.2f}x")
         
         if algo_time:
@@ -246,7 +268,7 @@ if __name__ == "__main__":
         else:
             print("\n=== Running Validation ===")
             key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-            if not run_validation(graph_file, args.nodes, args.bucket, key_prefix, args.validation_endpoint):
+            if not run_validation(graph_file, args.nodes, args.iter, args.bucket, key_prefix, args.validation_endpoint):
                 print("\n✗ VALIDATION FAILED - Results do not match!")
                 sys.exit(1)
             print("\n✓ VALIDATION PASSED - Results match!")

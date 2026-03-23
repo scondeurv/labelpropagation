@@ -431,8 +431,8 @@ fn label_propagation(
     // In unsupervised mode, each node starts with its own ID as its label
     if !global_has_seeds && initial_labels.is_empty() {
         println!("[Worker {}] No initial labels found globally, using unsupervised mode", worker);
-        for &idx in &graph.owned_nodes {
-            labels[idx as usize] = idx;
+        for (idx, label) in labels.iter_mut().enumerate() {
+            *label = idx as u32;
         }
     }
 
