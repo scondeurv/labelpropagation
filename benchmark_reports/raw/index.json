@@ -1,0 +1,51 @@
+{
+  "bfs": {
+    "result_file": "/home/sergio/src/bfs/crossover_bfs_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/bfs.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/bfs.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/bfs.md",
+    "points": 5
+  },
+  "sssp": {
+    "result_file": "/home/sergio/src/sssp/crossover_sssp_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/sssp.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/sssp.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/sssp.md",
+    "points": 5
+  },
+  "labelpropagation": {
+    "result_file": "/home/sergio/src/labelpropagation/crossover_validation_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/labelpropagation.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/labelpropagation.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/labelpropagation.md",
+    "points": 5
+  },
+  "louvain": {
+    "result_file": "/home/sergio/src/louvain/crossover_louvain_results.partial.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/louvain.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/louvain.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/louvain.md",
+    "points": 4
+  },
+  "gradientboosting": {
+    "result_file": "/home/sergio/src/gradientboosting/crossover_gb_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/gradientboosting.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/gradientboosting.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/gradientboosting.md",
+    "points": 5
+  },
+  "collaborativefiltering": {
+    "result_file": "/home/sergio/src/collaborativefiltering/crossover_cf_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/collaborativefiltering.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/collaborativefiltering.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/collaborativefiltering.md",
+    "points": 5
+  },
+  "unionfind": {
+    "result_file": "/home/sergio/src/unionfind/uf_crossover_validation_results.json",
+    "raw_copy": "/home/sergio/src/labelpropagation/benchmark_reports/raw/unionfind.json",
+    "figure": "/home/sergio/src/labelpropagation/benchmark_reports/figures/unionfind.svg",
+    "doc": "/home/sergio/src/labelpropagation/benchmark_reports/docs/unionfind.md",
+    "points": 5
+  }
+}

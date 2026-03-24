@@ -1,0 +1,192 @@
+{
+  "timestamp": "2026-03-23T21:54:12.403792",
+  "test_points": [
+    [
+      10000,
+      20000,
+      100
+    ],
+    [
+      50000,
+      30000,
+      100
+    ],
+    [
+      100000,
+      40000,
+      100
+    ],
+    [
+      200000,
+      50000,
+      100
+    ],
+    [
+      500000,
+      60000,
+      100
+    ]
+  ],
+  "runs_per_point": 5,
+  "results": [
+    {
+      "users": 10000,
+      "items": 20000,
+      "ratings": 999697,
+      "standalone_ms": 1167.4,
+      "standalone_std_ms": 25.66,
+      "standalone_runs_ms": [
+        1203.0,
+        1175.0,
+        1134.0,
+        1154.0,
+        1171.0
+      ],
+      "burst_span_ms": 5206.2,
+      "burst_span_std_ms": 466.36,
+      "burst_span_runs_ms": [
+        4871.0,
+        5038.0,
+        4988.0,
+        6026.0,
+        5108.0
+      ],
+      "burst_total_ms": 12962.0,
+      "burst_total_std_ms": 37.23,
+      "burst_total_runs_ms": [
+        13024.0,
+        12962.0,
+        12932.0,
+        12958.0,
+        12934.0
+      ],
+      "speedup": 0.2242,
+      "speedup_total": 0.0901,
+      "winner": "Standalone"
+    },
+    {
+      "users": 50000,
+      "items": 30000,
+      "ratings": 4998839,
+      "standalone_ms": 5890.8,
+      "standalone_std_ms": 99.64,
+      "standalone_runs_ms": [
+        5964.0,
+        5949.0,
+        5870.0,
+        5946.0,
+        5725.0
+      ],
+      "burst_span_ms": 10396.2,
+      "burst_span_std_ms": 284.65,
+      "burst_span_runs_ms": [
+        10889.0,
+        10310.0,
+        10253.0,
+        10168.0,
+        10361.0
+      ],
+      "burst_total_ms": 17776.0,
+      "burst_total_std_ms": 1117.12,
+      "burst_total_runs_ms": [
+        19029.0,
+        16972.0,
+        18970.0,
+        16950.0,
+        16959.0
+      ],
+      "speedup": 0.5666,
+      "speedup_total": 0.3314,
+      "winner": "Standalone"
+    },
+    {
+      "users": 100000,
+      "items": 40000,
+      "ratings": 9998675,
+      "standalone_ms": 12542.2,
+      "standalone_std_ms": 113.85,
+      "standalone_runs_ms": [
+        12456.0,
+        12736.0,
+        12551.0,
+        12486.0,
+        12482.0
+      ],
+      "burst_span_ms": 17705.0,
+      "burst_span_std_ms": 222.58,
+      "burst_span_runs_ms": [
+        17650.0,
+        17509.0,
+        17975.0,
+        17491.0,
+        17900.0
+      ],
+      "burst_total_ms": 25025.6,
+      "burst_total_std_ms": 20.39,
+      "burst_total_runs_ms": [
+        25009.0,
+        25021.0,
+        25061.0,
+        25016.0,
+        25021.0
+      ],
+      "speedup": 0.7084,
+      "speedup_total": 0.5012,
+      "winner": "Standalone"
+    },
+    {
+      "users": 200000,
+      "items": 50000,
+      "ratings": 19997103,
+      "standalone_ms": 29431.0,
+      "standalone_std_ms": 0.0,
+      "standalone_runs_ms": [
+        29431.0
+      ],
+      "burst_span_ms": 31883.0,
+      "burst_span_std_ms": 0.0,
+      "burst_span_runs_ms": [
+        31883.0
+      ],
+      "burst_total_ms": 40349.0,
+      "burst_total_std_ms": 0.0,
+      "burst_total_runs_ms": [
+        40349.0
+      ],
+      "speedup": 0.9231,
+      "speedup_total": 0.7294,
+      "winner": "Standalone"
+    },
+    {
+      "users": 500000,
+      "items": 60000,
+      "ratings": 49996574,
+      "standalone_ms": 102492.0,
+      "standalone_std_ms": 0.0,
+      "standalone_runs_ms": [
+        102492.0
+      ],
+      "burst_span_ms": 73858.0,
+      "burst_span_std_ms": 0.0,
+      "burst_span_runs_ms": [
+        73858.0
+      ],
+      "burst_total_ms": 81339.0,
+      "burst_total_std_ms": 0.0,
+      "burst_total_runs_ms": [
+        81339.0
+      ],
+      "speedup": 1.3877,
+      "speedup_total": 1.2601,
+      "winner": "Burst"
+    }
+  ],
+  "crossover_estimate_users": 249655.61773568657,
+  "configuration": {
+    "partitions": 4,
+    "num_factors": 10,
+    "iterations": 15,
+    "reg_lambda": 0.1,
+    "memory_mb": 4096
+  }
+}

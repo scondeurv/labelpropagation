@@ -21,32 +21,22 @@ def download_burst_labels(bucket, key, endpoint):
         print(f"Error downloading burst results: {e}", file=sys.stderr)
         return None
 
-def load_standalone_labels(output_file, graph_file, num_nodes):
-    """Extract labels from standalone JSON output or graph file with initial labels"""
+def load_standalone_labels(output_file):
+    """Extract final labels from standalone JSON output."""
     try:
         with open(output_file, 'r') as f:
             data = json.load(f)
             if 'labels' in data:
-                # lpst output format
                 labels_list = data['labels']
                 return {i: labels_list[i] for i in range(len(labels_list))}
+        print(
+            f"Standalone output {output_file} does not contain a 'labels' field",
+            file=sys.stderr,
+        )
     except Exception as e:
         print(f"Error loading standalone results: {e}", file=sys.stderr)
         return None
-    
-    # Fallback: load from graph file with initial labels
-    labels = {}
-    try:
-        with open(graph_file, 'r') as f:
-            for line in f:
-                parts = line.strip().split('\t')
-                if len(parts) >= 3:
-                    node = int(parts[0])
-                    label = int(parts[2])
-                    labels[node] = label
-        return labels
-    except:
-        return None
+    return None
 
 def compare_labels(burst_labels, standalone_labels, initial_seeds=None):
     """Compare burst and standalone label assignments"""
@@ -115,7 +105,7 @@ def main():
     print(f"✓ Loaded {len(burst_labels)} burst labels")
     
     print("Loading standalone results...")
-    standalone_labels = load_standalone_labels(args.standalone, args.graph, args.num_nodes)
+    standalone_labels = load_standalone_labels(args.standalone)
     if not standalone_labels:
         print("✗ Failed to load standalone results")
         return 1

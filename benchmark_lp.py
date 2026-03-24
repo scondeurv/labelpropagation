@@ -4,6 +4,7 @@ Benchmark Label Propagation: Standalone vs Burst versions
 """
 import argparse
 import json
+import tempfile
 import subprocess
 import sys
 import os
@@ -13,6 +14,7 @@ from labelpropagation_utils import generate_payload
 
 DEFAULT_WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-service.default.svc.cluster.local:9000")
 DEFAULT_HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
+BENCHMARK_JSON_PREFIX = "BENCHMARK_RESULT_JSON:"
 
 def benchmark_standalone(graph_file, num_nodes, max_iter):
     """Run standalone Label Propagation and return the full output dict."""
@@ -53,49 +55,52 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
         print(f"Error: {e}", file=sys.stderr)
         return None
 
-def run_validation(graph_file, num_nodes, max_iter, bucket, key, endpoint):
-    """Run validation comparing standalone vs burst results"""
-    import subprocess
-    
-    standalone_output = "lpst_output.json"
-    
-    # Run standalone and save full output
-    binary_path = "lpst/target/release/label-propagation"
+def run_validation(standalone_output, graph_file, num_nodes, max_iter, bucket, key, endpoint):
+    """Run validation comparing standalone vs burst results."""
+    if standalone_output is None:
+        standalone_output = benchmark_standalone(graph_file, num_nodes, max_iter)
+        if standalone_output is None:
+            print("Standalone failed during validation setup", file=sys.stderr)
+            return False
+
+    temp_path = None
     try:
-        result = subprocess.run(
-            [binary_path, graph_file, str(num_nodes), str(max_iter)],
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            suffix=".json",
+            prefix="lpst_output_",
+            delete=False,
+        ) as handle:
+            json.dump(standalone_output, handle)
+            temp_path = handle.name
+
+        val_result = subprocess.run(
+            [
+                sys.executable, "validate_results.py",
+                "--standalone", temp_path,
+                "--graph", graph_file,
+                "--bucket", bucket,
+                "--key", key,
+                "--endpoint", endpoint,
+                "--num-nodes", str(num_nodes),
+            ],
             capture_output=True,
             text=True,
-            timeout=600
         )
-        if result.returncode != 0:
-            print(f"Standalone failed: {result.stderr}", file=sys.stderr)
+
+        print(val_result.stdout)
+        if val_result.returncode != 0:
+            print("VALIDATION FAILED!", file=sys.stderr)
+            print(val_result.stderr, file=sys.stderr)
             return False
-        
-        with open(standalone_output, 'w') as f:
-            f.write(result.stdout)
+        return True
     except Exception as e:
-        print(f"Error running standalone for validation: {e}", file=sys.stderr)
+        print(f"Error running validation: {e}", file=sys.stderr)
         return False
-    
-    # Run validation script
-    val_result = subprocess.run([
-        sys.executable, "validate_results.py",
-        "--standalone", standalone_output,
-        "--graph", graph_file,
-        "--bucket", bucket,
-        "--key", key,
-        "--endpoint", endpoint,
-        "--num-nodes", str(num_nodes)
-    ], capture_output=True, text=True)
-    
-    print(val_result.stdout)
-    if val_result.returncode != 0:
-        print("VALIDATION FAILED!", file=sys.stderr)
-        print(val_result.stderr, file=sys.stderr)
-        return False
-    
-    return True
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
 def benchmark_burst(
     num_nodes,
@@ -185,6 +190,68 @@ def benchmark_burst(
         print(f"Error running burst: {e}", file=sys.stderr)
         return None, None
 
+
+def build_benchmark_summary(
+    nodes,
+    iterations,
+    partitions,
+    granularity,
+    memory_mb,
+    standalone_output,
+    burst_total_ms,
+    burst_algo_ms,
+    validation_requested,
+    validation_performed,
+    validation_passed,
+    validation_skipped_reason,
+):
+    standalone_exec_ms = None
+    standalone_total_ms = None
+    if standalone_output is not None:
+        standalone_exec_ms = standalone_output.get("execution_time_ms")
+        standalone_total_ms = standalone_output.get("total_time_ms")
+
+    algo_speedup = None
+    total_speedup = None
+    if standalone_exec_ms is not None and burst_algo_ms not in (None, 0):
+        algo_speedup = standalone_exec_ms / burst_algo_ms
+    if standalone_total_ms is not None and burst_total_ms not in (None, 0):
+        total_speedup = standalone_total_ms / burst_total_ms
+
+    return {
+        "algorithm": "labelpropagation",
+        "dataset": {
+            "nodes": nodes,
+            "graph_file": f"large_{nodes}.txt",
+        },
+        "configuration": {
+            "partitions": partitions,
+            "granularity": granularity,
+            "max_iter": iterations,
+            "memory_mb": memory_mb,
+        },
+        "standalone": {
+            "execution_time_ms": standalone_exec_ms,
+            "total_time_ms": standalone_total_ms,
+            "num_labeled": standalone_output.get("num_labeled") if standalone_output else None,
+            "num_communities": standalone_output.get("num_communities") if standalone_output else None,
+        },
+        "burst": {
+            "processing_time_ms": burst_algo_ms,
+            "total_time_ms": burst_total_ms,
+        },
+        "speedup": {
+            "algorithmic": algo_speedup,
+            "overall": total_speedup,
+        },
+        "validation": {
+            "requested": validation_requested,
+            "performed": validation_performed,
+            "passed": validation_passed,
+            "skipped_reason": validation_skipped_reason,
+        },
+    }
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark LP: Standalone vs Burst")
     parser.add_argument("--nodes", type=int, required=True, help="Number of nodes")
@@ -221,6 +288,9 @@ if __name__ == "__main__":
     # Benchmark burst
     burst_time = None
     algo_time = None
+    validation_performed = False
+    validation_passed = None
+    validation_skipped_reason = None
     if not args.skip_burst:
         print(f"Running burst version...")
         burst_time, algo_time = benchmark_burst(
@@ -264,11 +334,42 @@ if __name__ == "__main__":
     if args.validate:
         # Skip validation for very large graphs (too slow for standalone)
         if args.nodes > 5000:
+            validation_skipped_reason = (
+                f"skipped for {args.nodes} nodes because the standalone reference check is too expensive"
+            )
             print(f"\n⚠ Skipping validation for {args.nodes} nodes (too large for standalone reference)")
         else:
             print("\n=== Running Validation ===")
+            validation_performed = True
             key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-            if not run_validation(graph_file, args.nodes, args.iter, args.bucket, key_prefix, args.validation_endpoint):
+            validation_passed = run_validation(
+                standalone_output,
+                graph_file,
+                args.nodes,
+                args.iter,
+                args.bucket,
+                key_prefix,
+                args.validation_endpoint,
+            )
+            if not validation_passed:
                 print("\n✗ VALIDATION FAILED - Results do not match!")
                 sys.exit(1)
             print("\n✓ VALIDATION PASSED - Results match!")
+    else:
+        validation_skipped_reason = "validation not requested"
+
+    summary = build_benchmark_summary(
+        nodes=args.nodes,
+        iterations=args.iter,
+        partitions=args.partitions,
+        granularity=args.granularity,
+        memory_mb=args.memory,
+        standalone_output=standalone_output,
+        burst_total_ms=burst_time,
+        burst_algo_ms=algo_time,
+        validation_requested=args.validate,
+        validation_performed=validation_performed,
+        validation_passed=validation_passed,
+        validation_skipped_reason=validation_skipped_reason,
+    )
+    print(f"{BENCHMARK_JSON_PREFIX}{json.dumps(summary, sort_keys=True)}")

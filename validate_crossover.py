@@ -35,11 +35,37 @@ WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-service.
 BUCKET = os.environ.get("S3_BUCKET", "test-bucket")
 HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
 PYTHON_CMD = os.environ.get("VALIDATION_PYTHON", sys.executable)
+BENCHMARK_JSON_PREFIX = "BENCHMARK_RESULT_JSON:"
 
 
 def log(message: str) -> None:
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def crossing_intervals(results: list[dict], x_key: str) -> list[tuple[dict, dict]]:
+    intervals = []
+    for idx in range(1, len(results)):
+        prev = results[idx - 1]
+        curr = results[idx]
+        prev_speedup = prev.get("speedup")
+        curr_speedup = curr.get("speedup")
+        if prev_speedup is None or curr_speedup is None:
+            continue
+        if (prev_speedup - 1.0) * (curr_speedup - 1.0) <= 0 and prev_speedup != curr_speedup:
+            intervals.append((prev, curr))
+    return intervals
+
+
+def estimate_crossover(results: list[dict], x_key: str) -> tuple[float | None, list[tuple[dict, dict]]]:
+    intervals = crossing_intervals(results, x_key)
+    upward = [(prev, curr) for prev, curr in intervals if prev["speedup"] < 1.0 <= curr["speedup"]]
+    if len(upward) != 1:
+        return None, intervals
+    prev, curr = upward[0]
+    m = (curr["speedup"] - prev["speedup"]) / (curr[x_key] - prev[x_key])
+    b = prev["speedup"] - m * prev[x_key]
+    return (1.0 - b) / m, intervals
 
 
 def generate_graph(nodes: int) -> bool:
@@ -99,19 +125,21 @@ def run_benchmark(nodes: int, skip_generate: bool = False) -> dict | None:
     output = result.stdout
     print(output)
 
-    standalone_time = None
-    burst_time = None
-    for line in output.split("\n"):
-        if "Standalone Processing Time (Execution):" in line:
+    benchmark_summary = None
+    for line in output.splitlines():
+        if line.startswith(BENCHMARK_JSON_PREFIX):
             try:
-                standalone_time = float(line.split(":")[1].strip().split()[0])
-            except Exception:
-                pass
-        if "Burst Processing Time (Distributed Span):" in line:
-            try:
-                burst_time = float(line.split(":")[1].strip().split()[0])
-            except Exception:
-                pass
+                benchmark_summary = json.loads(line[len(BENCHMARK_JSON_PREFIX):])
+            except json.JSONDecodeError as exc:
+                log(f"⚠️  Could not decode benchmark JSON: {exc}")
+            break
+
+    if benchmark_summary is None:
+        log("⚠️  Benchmark did not emit structured JSON summary")
+        return None
+
+    standalone_time = benchmark_summary.get("standalone", {}).get("execution_time_ms")
+    burst_time = benchmark_summary.get("burst", {}).get("processing_time_ms")
 
     if standalone_time is not None and burst_time is not None:
         speedup = standalone_time / burst_time if burst_time > 0 else 0.0
@@ -123,9 +151,13 @@ def run_benchmark(nodes: int, skip_generate: bool = False) -> dict | None:
         return {
             "nodes": nodes,
             "standalone_ms": standalone_time,
+            "standalone_total_ms": benchmark_summary.get("standalone", {}).get("total_time_ms"),
             "burst_ms": burst_time,
+            "burst_total_ms": benchmark_summary.get("burst", {}).get("total_time_ms"),
             "speedup": speedup,
+            "speedup_total": benchmark_summary.get("speedup", {}).get("overall"),
             "winner": winner,
+            "validation": benchmark_summary.get("validation", {}),
         }
 
     log("⚠️  Could not parse results")
@@ -147,6 +179,9 @@ def main() -> None:
     for nodes in TEST_POINTS:
         sa_times = []
         bs_times = []
+        sa_total_times = []
+        bs_total_times = []
+        validation_state = None
 
         for run_idx in range(RUNS):
             log(f"\n▶ Run {run_idx + 1}/{RUNS} — {nodes / 1e6:.1f}M nodes")
@@ -154,6 +189,11 @@ def main() -> None:
             if result:
                 sa_times.append(result["standalone_ms"])
                 bs_times.append(result["burst_ms"])
+                if result.get("standalone_total_ms") is not None:
+                    sa_total_times.append(result["standalone_total_ms"])
+                if result.get("burst_total_ms") is not None:
+                    bs_total_times.append(result["burst_total_ms"])
+                validation_state = result.get("validation")
             else:
                 log(f"⚠️  Run {run_idx + 1} failed, skipping")
             if run_idx < RUNS - 1:
@@ -167,7 +207,12 @@ def main() -> None:
         bs_mean = statistics.mean(bs_times)
         sa_std = statistics.stdev(sa_times) if len(sa_times) > 1 else 0.0
         bs_std = statistics.stdev(bs_times) if len(bs_times) > 1 else 0.0
+        sa_total_mean = statistics.mean(sa_total_times) if sa_total_times else None
+        bs_total_mean = statistics.mean(bs_total_times) if bs_total_times else None
         speedup = sa_mean / bs_mean if bs_mean > 0 else 0.0
+        speedup_total = None
+        if sa_total_mean is not None and bs_total_mean not in (None, 0):
+            speedup_total = sa_total_mean / bs_total_mean
         winner = "Burst" if speedup > 1.0 else "Standalone"
 
         log(f"\n📊 Aggregate {nodes / 1e6:.1f}M ({len(sa_times)} runs):")
@@ -185,6 +230,10 @@ def main() -> None:
             "burst_runs_ms": bs_times,
             "speedup": round(speedup, 4),
             "winner": winner,
+            "standalone_total_ms": round(sa_total_mean, 2) if sa_total_mean is not None else None,
+            "burst_total_ms": round(bs_total_mean, 2) if bs_total_mean is not None else None,
+            "speedup_total": round(speedup_total, 4) if speedup_total is not None else None,
+            "validation": validation_state or {},
         })
         time.sleep(5)
 
@@ -194,8 +243,7 @@ def main() -> None:
     log(f"{'Nodes':>12} {'SA mean':>12} {'SA std':>9} {'BS mean':>12} {'BS std':>9} {'Speedup':>10} {'Winner':>12}")
     log("-" * 80)
 
-    crossover_found = False
-    crossover_point = None
+    crossover_point, intervals = estimate_crossover(aggregated, "nodes")
     for i, result in enumerate(aggregated):
         log(
             f"{result['nodes'] / 1e6:>10.1f}M "
@@ -206,17 +254,14 @@ def main() -> None:
             f"{result['speedup']:>9.2f}x "
             f"{result['winner']:>12}"
         )
-        if i > 0 and not crossover_found:
-            prev = aggregated[i - 1]
-            if prev["speedup"] < 1.0 and result["speedup"] >= 1.0:
-                crossover_found = True
-                m = (result["speedup"] - prev["speedup"]) / (result["nodes"] - prev["nodes"])
-                b = prev["speedup"] - m * prev["nodes"]
-                crossover_point = (1.0 - b) / m
-                log("-" * 80)
-                log(f"📍 CROSSOVER DETECTED between {prev['nodes'] / 1e6:.1f}M and {result['nodes'] / 1e6:.1f}M")
-                log(f"📍 Refined estimate: {crossover_point / 1e6:.2f}M nodes")
-                log("-" * 80)
+    if crossover_point is not None:
+        prev, curr = [pair for pair in intervals if pair[0]["speedup"] < 1.0 <= pair[1]["speedup"]][0]
+        log("-" * 80)
+        log(f"📍 CROSSOVER DETECTED between {prev['nodes'] / 1e6:.1f}M and {curr['nodes'] / 1e6:.1f}M")
+        log(f"📍 Refined estimate: {crossover_point / 1e6:.2f}M nodes")
+        log("-" * 80)
+    elif len(intervals) > 1:
+        log("⚠️  Multiple speedup sign changes detected; crossover estimate omitted as ambiguous")
 
     log("=" * 80)
 
@@ -226,6 +271,8 @@ def main() -> None:
         "runs_per_point": RUNS,
         "results": aggregated,
         "crossover_estimate": crossover_point,
+        "crossing_intervals": [[prev["nodes"], curr["nodes"]] for prev, curr in intervals],
+        "crossover_warning": "multiple_sign_changes" if len(intervals) > 1 else None,
         "configuration": {
             "partitions": PARTITIONS,
             "max_iter": MAX_ITER,

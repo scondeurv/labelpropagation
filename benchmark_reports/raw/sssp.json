@@ -1,0 +1,184 @@
+{
+  "timestamp": "2026-03-24T16:27:08.612009",
+  "test_points": [
+    100000,
+    500000,
+    1000000,
+    2000000,
+    3000000
+  ],
+  "runs_per_point": 5,
+  "results": [
+    {
+      "nodes": 100000,
+      "standalone_ms": 26,
+      "standalone_std_ms": 7.62,
+      "standalone_runs_ms": [
+        37,
+        31,
+        20,
+        21,
+        21
+      ],
+      "burst_ms": 3355.8,
+      "burst_std_ms": 462.3,
+      "burst_runs_ms": [
+        3124,
+        4182,
+        3135,
+        3172,
+        3166
+      ],
+      "speedup": 0.0077,
+      "standalone_total_ms": 96.6,
+      "burst_total_ms": 11058,
+      "speedup_total": 0.0087,
+      "winner": "Standalone",
+      "validation": {
+        "passed": null,
+        "performed": false,
+        "requested": true,
+        "skipped_reason": "skipped for 100000 nodes because the full in-memory distance check is too expensive"
+      }
+    },
+    {
+      "nodes": 500000,
+      "standalone_ms": 153.8,
+      "standalone_std_ms": 6.14,
+      "standalone_runs_ms": [
+        159,
+        146,
+        149,
+        155,
+        160
+      ],
+      "burst_ms": 3490.4,
+      "burst_std_ms": 729.41,
+      "burst_runs_ms": [
+        3419,
+        3435,
+        4574,
+        3506,
+        2518
+      ],
+      "speedup": 0.0441,
+      "standalone_total_ms": 504.6,
+      "burst_total_ms": 11447.4,
+      "speedup_total": 0.0441,
+      "winner": "Standalone",
+      "validation": {
+        "passed": null,
+        "performed": false,
+        "requested": true,
+        "skipped_reason": "skipped for 500000 nodes because the full in-memory distance check is too expensive"
+      }
+    },
+    {
+      "nodes": 1000000,
+      "standalone_ms": 323.4,
+      "standalone_std_ms": 17.27,
+      "standalone_runs_ms": [
+        307,
+        314,
+        331,
+        350,
+        315
+      ],
+      "burst_ms": 4141,
+      "burst_std_ms": 386.62,
+      "burst_runs_ms": [
+        3906,
+        4146,
+        3968,
+        4807,
+        3878
+      ],
+      "speedup": 0.0781,
+      "standalone_total_ms": 999.6,
+      "burst_total_ms": 11833.4,
+      "speedup_total": 0.0845,
+      "winner": "Standalone",
+      "validation": {
+        "passed": null,
+        "performed": false,
+        "requested": true,
+        "skipped_reason": "skipped for 1000000 nodes because the full in-memory distance check is too expensive"
+      }
+    },
+    {
+      "nodes": 2000000,
+      "standalone_ms": 807.2,
+      "standalone_std_ms": 138.69,
+      "standalone_runs_ms": [
+        777,
+        1048,
+        770,
+        692,
+        749
+      ],
+      "burst_ms": 4536.4,
+      "burst_std_ms": 543.04,
+      "burst_runs_ms": [
+        3930,
+        3958,
+        4853,
+        4961,
+        4980
+      ],
+      "speedup": 0.1779,
+      "standalone_total_ms": 2246.2,
+      "burst_total_ms": 13066.6,
+      "speedup_total": 0.1719,
+      "winner": "Standalone",
+      "validation": {
+        "passed": null,
+        "performed": false,
+        "requested": true,
+        "skipped_reason": "skipped for 2000000 nodes because the full in-memory distance check is too expensive"
+      }
+    },
+    {
+      "nodes": 3000000,
+      "standalone_ms": 1633,
+      "standalone_std_ms": 570.15,
+      "standalone_runs_ms": [
+        1072,
+        1782,
+        2280,
+        1007,
+        2024
+      ],
+      "burst_ms": 6306.6,
+      "burst_std_ms": 707.94,
+      "burst_runs_ms": [
+        5872,
+        7478,
+        5913,
+        5796,
+        6474
+      ],
+      "speedup": 0.2589,
+      "standalone_total_ms": 3784,
+      "burst_total_ms": 15117.4,
+      "speedup_total": 0.2503,
+      "winner": "Standalone",
+      "validation": {
+        "passed": null,
+        "performed": false,
+        "requested": true,
+        "skipped_reason": "skipped for 3000000 nodes because the full in-memory distance check is too expensive"
+      }
+    }
+  ],
+  "crossover_estimate": null,
+  "crossing_intervals": [],
+  "crossover_warning": null,
+  "configuration": {
+    "partitions": 4,
+    "max_iterations": 500,
+    "memory_mb": 4096,
+    "source_node": 0,
+    "density": 10,
+    "max_weight": 10.0
+  }
+}

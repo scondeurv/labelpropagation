@@ -1,0 +1,174 @@
+{
+  "timestamp": "2026-03-22T21:05:40.526945",
+  "test_points": [
+    [
+      10000,
+      10
+    ],
+    [
+      50000,
+      20
+    ],
+    [
+      100000,
+      30
+    ],
+    [
+      200000,
+      40
+    ],
+    [
+      500000,
+      50
+    ]
+  ],
+  "runs_per_point": 5,
+  "results": [
+    {
+      "nodes": 10000,
+      "communities": 10,
+      "standalone_ms": 95.2,
+      "standalone_std_ms": 12.85,
+      "standalone_runs_ms": [
+        118.0,
+        89.0,
+        87.0,
+        91.0,
+        91.0
+      ],
+      "burst_span_ms": 38.8,
+      "burst_span_std_ms": 6.26,
+      "burst_span_runs_ms": [
+        34.0,
+        40.0,
+        48.0,
+        40.0,
+        32.0
+      ],
+      "burst_total_ms": 10826.2,
+      "burst_total_std_ms": 65.41,
+      "burst_total_runs_ms": [
+        10943.0,
+        10803.0,
+        10797.0,
+        10792.0,
+        10796.0
+      ],
+      "speedup": 2.4536,
+      "speedup_total": 0.0088,
+      "winner": "Burst"
+    },
+    {
+      "nodes": 50000,
+      "communities": 20,
+      "standalone_ms": 1270.4,
+      "standalone_std_ms": 31.0,
+      "standalone_runs_ms": [
+        1255.0,
+        1250.0,
+        1265.0,
+        1257.0,
+        1325.0
+      ],
+      "burst_span_ms": 349.2,
+      "burst_span_std_ms": 10.5,
+      "burst_span_runs_ms": [
+        341.0,
+        367.0,
+        343.0,
+        350.0,
+        345.0
+      ],
+      "burst_total_ms": 12057.0,
+      "burst_total_std_ms": 1868.7,
+      "burst_total_runs_ms": [
+        10789.0,
+        15000.0,
+        12856.0,
+        10808.0,
+        10832.0
+      ],
+      "speedup": 3.638,
+      "speedup_total": 0.1054,
+      "winner": "Burst"
+    },
+    {
+      "nodes": 100000,
+      "communities": 30,
+      "standalone_ms": 3868.2,
+      "standalone_std_ms": 36.45,
+      "standalone_runs_ms": [
+        3861.0,
+        3850.0,
+        3835.0,
+        3865.0,
+        3930.0
+      ],
+      "burst_span_ms": 1092.0,
+      "burst_span_std_ms": 32.46,
+      "burst_span_runs_ms": [
+        1059.0,
+        1064.0,
+        1120.0,
+        1086.0,
+        1131.0
+      ],
+      "burst_total_ms": 13325.6,
+      "burst_total_std_ms": 890.26,
+      "burst_total_runs_ms": [
+        12933.0,
+        12945.0,
+        12917.0,
+        12915.0,
+        14918.0
+      ],
+      "speedup": 3.5423,
+      "speedup_total": 0.2903,
+      "winner": "Burst"
+    },
+    {
+      "nodes": 200000,
+      "communities": 40,
+      "standalone_ms": 12917.0,
+      "standalone_std_ms": 246.53,
+      "standalone_runs_ms": [
+        12792.0,
+        13250.0,
+        13104.0,
+        12677.0,
+        12762.0
+      ],
+      "burst_span_ms": 3809.0,
+      "burst_span_std_ms": 105.57,
+      "burst_span_runs_ms": [
+        3980.0,
+        3793.0,
+        3694.0,
+        3766.0,
+        3812.0
+      ],
+      "burst_total_ms": 19816.8,
+      "burst_total_std_ms": 1802.84,
+      "burst_total_runs_ms": [
+        23041.0,
+        19076.0,
+        18995.0,
+        19007.0,
+        18965.0
+      ],
+      "speedup": 3.3912,
+      "speedup_total": 0.6518,
+      "winner": "Burst"
+    }
+  ],
+  "crossover_estimate_nodes": null,
+  "configuration": {
+    "partitions": 4,
+    "max_passes": 20,
+    "min_gain": 1e-06,
+    "p_in": 0.05,
+    "p_out": 0.001,
+    "memory_mb": 2048,
+    "comparison_mode": "full"
+  }
+}
