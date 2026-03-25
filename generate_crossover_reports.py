@@ -42,6 +42,7 @@ class ReportSpec:
     dataset_note: str
     validation_note: str
     crossover_key: str | None = None
+    spark_result_file: Path | None = None
 
 
 WARM_BURST_KEY = "burst_warm_ms"
@@ -106,8 +107,42 @@ def load_preferred_payload(spec: ReportSpec) -> tuple[dict[str, Any], Path]:
     raise ValueError(f"{spec.slug}: could not load a valid non-empty payload ({joined})")
 
 
+def load_optional_spark_payload(spec: ReportSpec) -> tuple[dict[str, Any] | None, Path | None]:
+    if not spec.spark_result_file or not spec.spark_result_file.exists():
+        return None, None
+    payload = load_json(spec.spark_result_file)
+    if payload.get("supported") is False:
+        return payload, spec.spark_result_file
+    results = payload.get("results")
+    if isinstance(results, list) and results:
+        return payload, spec.spark_result_file
+    return None, None
+
+
 def result_value(row: dict[str, Any], key: str | None) -> float | None:
     if not key:
+        return None
+    value = row.get(key)
+    if value is None:
+        return None
+    return float(value)
+
+
+def spark_row_map(spec: ReportSpec, spark_payload: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
+    if not spark_payload or spark_payload.get("supported") is False:
+        return {}
+    rows = spark_payload.get("results", [])
+    return {int(row[spec.x_key]): row for row in rows if spec.x_key in row}
+
+
+def spark_value(
+    spec: ReportSpec,
+    spark_payload: dict[str, Any] | None,
+    x_value: int,
+    key: str,
+) -> float | None:
+    row = spark_row_map(spec, spark_payload).get(int(x_value))
+    if not row:
         return None
     value = row.get(key)
     if value is None:
@@ -137,28 +172,39 @@ def has_warm_metrics(payload: dict[str, Any]) -> bool:
 
 def primary_mode(spec: ReportSpec, payload: dict[str, Any]) -> str:
     results = payload.get("results", [])
+    if has_warm_metrics(payload):
+        return "warm"
     if has_metric(results, spec.burst_total_key) and has_metric(results, spec.speedup_total_key):
         return "total"
     return "span"
 
 
 def primary_metric_label(spec: ReportSpec, payload: dict[str, Any]) -> str:
-    return "tiempo total extremo a extremo cold" if primary_mode(spec, payload) == "total" else "span algorítmico"
+    mode = primary_mode(spec, payload)
+    if mode == "warm":
+        return "tiempo total warm (carga + ejecución)"
+    if mode == "total":
+        return "tiempo total extremo a extremo cold"
+    return "span algorítmico"
 
 
 def primary_standalone_key(spec: ReportSpec, payload: dict[str, Any]) -> str:
-    if primary_mode(spec, payload) == "total" and has_metric(payload.get("results", []), "standalone_total_ms"):
+    if primary_mode(spec, payload) in {"total", "warm"} and has_metric(payload.get("results", []), "standalone_total_ms"):
         return "standalone_total_ms"
     return spec.standalone_key
 
 
 def primary_burst_key(spec: ReportSpec, payload: dict[str, Any]) -> str:
+    if primary_mode(spec, payload) == "warm":
+        return WARM_BURST_KEY
     if primary_mode(spec, payload) == "total" and spec.burst_total_key:
         return spec.burst_total_key
     return spec.burst_span_key
 
 
 def primary_speedup_key(spec: ReportSpec, payload: dict[str, Any]) -> str:
+    if primary_mode(spec, payload) == "warm":
+        return WARM_SPEEDUP_KEY
     if primary_mode(spec, payload) == "total" and spec.speedup_total_key:
         return spec.speedup_total_key
     return spec.speedup_key
@@ -264,7 +310,7 @@ def estimate_crossing(
     return (1.0 - intercept) / slope, intervals
 
 
-def make_figure(spec: ReportSpec, payload: dict[str, Any]) -> Path:
+def make_figure(spec: ReportSpec, payload: dict[str, Any], spark_payload: dict[str, Any] | None = None) -> Path:
     results = payload.get("results", [])
     x_values = [int(row[spec.x_key]) for row in results]
     labels = [fmt_count(x, spec.x_key) for x in x_values]
@@ -276,6 +322,18 @@ def make_figure(spec: ReportSpec, payload: dict[str, Any]) -> Path:
     speedup_span = metric_series(results, spec.speedup_key)
     speedup_total = metric_series(results, spec.speedup_total_key)
     speedup_warm = metric_series(results, WARM_SPEEDUP_KEY)
+    spark_total = [spark_value(spec, spark_payload, x, "spark_total_ms") for x in x_values]
+    spark_exec = [spark_value(spec, spark_payload, x, "spark_exec_ms") for x in x_values]
+    spark_speedup_total = []
+    spark_speedup_exec = []
+    for row in results:
+        x = int(row[spec.x_key])
+        sa_total = result_value(row, "standalone_total_ms")
+        sa_exec = result_value(row, spec.standalone_key)
+        sp_total = spark_value(spec, spark_payload, x, "spark_total_ms")
+        sp_exec = spark_value(spec, spark_payload, x, "spark_exec_ms")
+        spark_speedup_total.append((sa_total / sp_total) if sa_total not in (None, 0) and sp_total not in (None, 0) else None)
+        spark_speedup_exec.append((sa_exec / sp_exec) if sa_exec not in (None, 0) and sp_exec not in (None, 0) else None)
 
     plt.style.use("seaborn-v0_8-whitegrid")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
@@ -284,12 +342,16 @@ def make_figure(spec: ReportSpec, payload: dict[str, Any]) -> Path:
     if any(v is not None for v in standalone_total) and any(v is not None for v in burst_total):
         ax.plot(labels, standalone_total, marker="o", linewidth=2, label="Standalone total", color="#0f766e")
         ax.plot(labels, burst_total, marker="^", linewidth=2, label="Burst cold total", color="#b45309")
+        if any(v is not None for v in spark_total):
+            ax.plot(labels, spark_total, marker="s", linewidth=2, label="Spark total", color="#1d4ed8")
         if any(v is not None for v in burst_warm):
             ax.plot(labels, burst_warm, marker="D", linewidth=2, label="Burst warm total", color="#7c3aed")
         ax.set_title(f"{spec.title}: tiempos totales")
     else:
         ax.plot(labels, standalone_exec, marker="o", linewidth=2, label="Standalone exec", color="#0f766e")
         ax.plot(labels, burst_span, marker="s", linewidth=2, label="Burst span", color="#1d4ed8")
+        if any(v is not None for v in spark_exec):
+            ax.plot(labels, spark_exec, marker="^", linewidth=2, label="Spark exec", color="#b45309")
         ax.set_title(f"{spec.title}: tiempos disponibles")
     ax.set_xlabel(spec.x_label)
     ax.set_ylabel("Tiempo (ms)")
@@ -299,6 +361,10 @@ def make_figure(spec: ReportSpec, payload: dict[str, Any]) -> Path:
     ax2.plot(labels, speedup_span, marker="s", linewidth=2, label="Speedup span", color="#dc2626")
     if any(v is not None for v in speedup_total):
         ax2.plot(labels, speedup_total, marker="^", linewidth=2, label="Speedup cold total", color="#2563eb")
+    if any(v is not None for v in spark_speedup_total):
+        ax2.plot(labels, spark_speedup_total, marker="o", linewidth=2, label="Speedup Spark total", color="#0f766e")
+    elif any(v is not None for v in spark_speedup_exec):
+        ax2.plot(labels, spark_speedup_exec, marker="o", linewidth=2, label="Speedup Spark exec", color="#0f766e")
     if any(v is not None for v in speedup_warm):
         ax2.plot(labels, speedup_warm, marker="D", linewidth=2, label="Speedup warm total", color="#7c3aed")
     ax2.axhline(1.0, color="#374151", linestyle="--", linewidth=1)
@@ -321,7 +387,8 @@ def detect_validation_summary(spec: ReportSpec, payload: dict[str, Any]) -> str:
 
 
 def crossover_summary(spec: ReportSpec, payload: dict[str, Any]) -> str:
-    return metric_summary(spec, payload, "cold" if has_total_metrics(spec, payload) else "span")
+    mode = primary_mode(spec, payload)
+    return metric_summary(spec, payload, "cold" if mode == "total" else mode)
 
 
 def crossover_context(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
@@ -349,7 +416,7 @@ def crossover_context(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
     return lines
 
 
-def key_findings(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
+def key_findings(spec: ReportSpec, payload: dict[str, Any], spark_payload: dict[str, Any] | None = None) -> list[str]:
     results = payload.get("results", [])
     if not results:
         return ["Sin resultados agregados."]
@@ -376,6 +443,31 @@ def key_findings(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
             f"En el punto mayor ({fmt_count(int(last[spec.x_key]), spec.x_key)}), standalone exec tarda "
             f"{float(last[spec.standalone_key]):.1f} ms y burst span {float(last[spec.burst_span_key]):.1f} ms."
         )
+    spark_results = spark_row_map(spec, spark_payload)
+    if spark_payload and spark_payload.get("supported") is False:
+        findings.append(f"Spark no se incluye como baseline comparable aquí: {spark_payload.get('reason', 'sin razon publicada')}.")
+    elif spark_results:
+        first_spark = spark_results.get(int(first[spec.x_key]))
+        last_spark = spark_results.get(int(last[spec.x_key]))
+        if first_spark:
+            findings.append(
+                f"En el punto menor ({fmt_count(int(first[spec.x_key]), spec.x_key)}), Spark tarda "
+                f"{float(first_spark['spark_total_ms']):.1f} ms totales y {float(first_spark['spark_exec_ms']):.1f} ms de computo."
+            )
+        if last_spark:
+            findings.append(
+                f"En el punto mayor ({fmt_count(int(last[spec.x_key]), spec.x_key)}), Spark tarda "
+                f"{float(last_spark['spark_total_ms']):.1f} ms totales y {float(last_spark['spark_exec_ms']):.1f} ms de computo."
+            )
+        validation_rows = [row for row in spark_results.values() if isinstance(row.get("validation"), dict)]
+        if validation_rows:
+            checked = len(validation_rows)
+            passed = sum(1 for row in validation_rows if row["validation"].get("passed") is True)
+            findings.append(
+                f"Spark publicó validación estructurada en {checked} puntos y la pasó en {passed} de ellos."
+            )
+    if spark_payload and spark_payload.get("experimental_note"):
+        findings.append(f"Nota experimental Spark: {spark_payload['experimental_note']}")
     if has_warm_metrics(payload):
         findings.append(metric_summary(spec, payload, "warm"))
     else:
@@ -401,7 +493,7 @@ def key_findings(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
     return findings
 
 
-def dataset_lines(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
+def dataset_lines(spec: ReportSpec, payload: dict[str, Any], spark_payload: dict[str, Any] | None = None) -> list[str]:
     results = payload.get("results", [])
     tested = ", ".join(fmt_count(int(row[spec.x_key]), spec.x_key) for row in results)
     config = payload.get("configuration", {})
@@ -422,6 +514,12 @@ def dataset_lines(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
         )
     if not has_warm_metrics(payload):
         lines.append("- En esta campaña no hay una columna warm separada; no se ha imputado artificialmente a partir de otras marcas temporales.")
+    if spark_payload and spark_payload.get("supported") is False:
+        lines.append(f"- Spark: no se usa como baseline comparable en este algoritmo. Motivo: {spark_payload.get('reason', 'no publicado')}.")
+    elif spark_payload and spark_payload.get("results"):
+        lines.append("- Spark: baseline persistente en cluster Docker/GraphX, medida aparte para comparar con un framework distribuido no serverless.")
+        if spark_payload.get("experimental_note"):
+            lines.append(f"- Nota experimental Spark: {spark_payload['experimental_note']}")
     if config:
         compact = ", ".join(f"{k}={v}" for k, v in config.items())
         lines.append(f"- Configuración de campaña: {compact}.")
@@ -451,31 +549,39 @@ def result_table(spec: ReportSpec, payload: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def build_table_lines(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
+def build_table_lines(spec: ReportSpec, payload: dict[str, Any], spark_payload: dict[str, Any] | None = None) -> list[str]:
     rows = payload.get("results", [])
+    spark_rows = spark_row_map(spec, spark_payload)
     lines = [
-        f"| {spec.x_label} | SA total (ms) | Burst cold (ms) | Burst warm (ms) | SA exec (ms) | Burst span (ms) | Speedup cold | Speedup warm | Speedup span |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        f"| {spec.x_label} | SA total (ms) | Burst cold (ms) | Spark total (ms) | Burst warm (ms) | SA exec (ms) | Burst span (ms) | Spark exec (ms) | Speedup cold | Speedup Spark total | Speedup warm | Speedup span |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         x_val = fmt_count(int(row[spec.x_key]), spec.x_key)
+        spark_row = spark_rows.get(int(row[spec.x_key]), {})
         sa_total = result_value(row, "standalone_total_ms")
         burst_cold = result_value(row, spec.burst_total_key)
+        spark_total = result_value(spark_row, "spark_total_ms")
         burst_warm = result_value(row, WARM_BURST_KEY)
         sa_exec = result_value(row, spec.standalone_key)
         burst_span = result_value(row, spec.burst_span_key)
+        spark_exec = result_value(spark_row, "spark_exec_ms")
         sp_cold = result_value(row, spec.speedup_total_key)
+        sp_spark_total = (sa_total / spark_total) if sa_total not in (None, 0) and spark_total not in (None, 0) else None
         sp_warm = result_value(row, WARM_SPEEDUP_KEY)
         sp_span = result_value(row, spec.speedup_key)
         lines.append(
-            "| {x} | {sa_total} | {burst_cold} | {burst_warm} | {sa_exec:.2f} | {burst_span:.2f} | {sp_cold} | {sp_warm} | {sp_span:.2f}x |".format(
+            "| {x} | {sa_total} | {burst_cold} | {spark_total} | {burst_warm} | {sa_exec:.2f} | {burst_span:.2f} | {spark_exec} | {sp_cold} | {sp_spark_total} | {sp_warm} | {sp_span:.2f}x |".format(
                 x=x_val,
                 sa_total=f"{sa_total:.2f}" if sa_total is not None else "n/d",
                 burst_cold=f"{burst_cold:.2f}" if burst_cold is not None else "n/d",
+                spark_total=f"{spark_total:.2f}" if spark_total is not None else "n/d",
                 burst_warm=f"{burst_warm:.2f}" if burst_warm is not None else "n/d",
                 sa_exec=sa_exec,
                 burst_span=burst_span,
+                spark_exec=f"{spark_exec:.2f}" if spark_exec is not None else "n/d",
                 sp_cold=f"{sp_cold:.2f}x" if sp_cold is not None else "n/d",
+                sp_spark_total=f"{sp_spark_total:.2f}x" if sp_spark_total is not None else "n/d",
                 sp_warm=f"{sp_warm:.2f}x" if sp_warm is not None else "n/d",
                 sp_span=sp_span,
             )
@@ -483,10 +589,15 @@ def build_table_lines(spec: ReportSpec, payload: dict[str, Any]) -> list[str]:
     return lines
 
 
-def write_markdown(spec: ReportSpec, payload: dict[str, Any], figure_path: Path) -> Path:
+def write_markdown(
+    spec: ReportSpec,
+    payload: dict[str, Any],
+    figure_path: Path,
+    spark_payload: dict[str, Any] | None = None,
+) -> Path:
     rel_figure = Path(os.path.relpath(figure_path, DOC_DIR))
-    findings = key_findings(spec, payload)
-    table_lines = build_table_lines(spec, payload)
+    findings = key_findings(spec, payload, spark_payload)
+    table_lines = build_table_lines(spec, payload, spark_payload)
     content = "\n".join(
         [
             f"# {spec.title}",
@@ -499,10 +610,11 @@ def write_markdown(spec: ReportSpec, payload: dict[str, Any], figure_path: Path)
             "",
             f"- **Standalone**: {spec.standalone_desc}",
             f"- **Burst**: {spec.burst_desc}",
+            "- **Spark**: baseline persistente con GraphX/cluster Docker cuando exista una implementacion semantica equivalente; en los casos no comparables se documenta de forma explicita.",
             "",
             "## Dataset y metodología",
             "",
-            *dataset_lines(spec, payload),
+            *dataset_lines(spec, payload, spark_payload),
             f"- Validación: {detect_validation_summary(spec, payload)}",
             "",
             "## Resultados",
@@ -516,6 +628,7 @@ def write_markdown(spec: ReportSpec, payload: dict[str, Any], figure_path: Path)
             "- `Cold end-to-end`: mide la latencia real observada si la campaña dispara workers fríos.",
             "- `Warm end-to-end`: modela workers precalentados; solo se reporta cuando el benchmark la publica explícitamente.",
             "- `Span algorítmico`: aísla el tramo de cómputo distribuido y sirve para explicar la escalabilidad del algoritmo, no para sustituir al tiempo real del sistema.",
+            "- `Spark total/exec`: aporta una baseline de framework distribuido persistente, útil para separar el coste del modelo serverless del coste intrínseco de distribuir el algoritmo.",
             "",
             "## Hallazgos",
             "",
@@ -536,10 +649,10 @@ def build_specs() -> list[ReportSpec]:
             result_file=ROOT / "bfs/crossover_bfs_results.json",
             x_key="nodes",
             x_label="Nodos",
-            standalone_key="standalone_ms",
-            burst_span_key="burst_ms",
+            standalone_key="standalone_exec_ms",
+            burst_span_key="burst_span_ms",
             burst_total_key="burst_total_ms",
-            speedup_key="speedup",
+            speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo dirigido sintético",
             theory="BFS recorre un grafo por niveles a partir de un nodo fuente y produce la distancia en aristas desde esa fuente al resto de nodos alcanzables.",
@@ -548,6 +661,7 @@ def build_specs() -> list[ReportSpec]:
             dataset_note="Se reutilizó exactamente el mismo grafo por tamaño, subiendo a MinIO las particiones que consume burst y usando la copia local para standalone.",
             validation_note="Para tamaños grandes se reutilizó el mismo dataset en todas las repeticiones; la comparación funcional fuerte se apoya en la revisión estática y en las campañas pequeñas previas, porque el chequeo completo del vector de niveles no se ejecutó en memoria a estos tamaños.",
             crossover_key="crossover_estimate",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/bfs.json",
         ),
         ReportSpec(
             slug="sssp",
@@ -555,10 +669,10 @@ def build_specs() -> list[ReportSpec]:
             result_file=ROOT / "sssp/crossover_sssp_results.json",
             x_key="nodes",
             x_label="Nodos",
-            standalone_key="standalone_ms",
-            burst_span_key="burst_ms",
+            standalone_key="standalone_exec_ms",
+            burst_span_key="burst_span_ms",
             burst_total_key="burst_total_ms",
-            speedup_key="speedup",
+            speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo ponderado sintético con pesos no negativos",
             theory="SSSP calcula las distancias mínimas desde una fuente al resto de nodos. En este workspace se trabaja con pesos no negativos y la versión burst propaga relajaciones entre particiones.",
@@ -567,6 +681,7 @@ def build_specs() -> list[ReportSpec]:
             dataset_note="Los grafos se generaron una vez por tamaño con la misma semilla y los mismos pesos para ambas implementaciones.",
             validation_note="Las repeticiones reutilizan el mismo dataset; el benchmark grande omite la validación in-memory completa por coste, pero sí compara métricas de salida consistentes y se ejecutó sobre exactamente la misma entrada.",
             crossover_key="crossover_estimate",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/sssp.json",
         ),
         ReportSpec(
             slug="labelpropagation",
@@ -574,10 +689,10 @@ def build_specs() -> list[ReportSpec]:
             result_file=ROOT / "labelpropagation/crossover_validation_results.json",
             x_key="nodes",
             x_label="Nodos",
-            standalone_key="standalone_ms",
-            burst_span_key="burst_ms",
+            standalone_key="standalone_exec_ms",
+            burst_span_key="burst_span_ms",
             burst_total_key="burst_total_ms",
-            speedup_key="speedup",
+            speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo sintético con propagación de etiquetas",
             theory="Label Propagation difunde etiquetas por vecindad hasta estabilizarse y suele usarse para clasificación semisupervisada o detección de comunidades ligeras.",
@@ -586,6 +701,7 @@ def build_specs() -> list[ReportSpec]:
             dataset_note="La campaña seria reutilizó el mismo dataset por tamaño y la misma semilla en standalone y burst.",
             validation_note="Las rondas de la campaña reutilizan el mismo dataset y la equivalencia semántica se corrigió antes de lanzar esta tanda.",
             crossover_key="crossover_estimate",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/labelpropagation.json",
         ),
         ReportSpec(
             slug="louvain",
@@ -593,10 +709,10 @@ def build_specs() -> list[ReportSpec]:
             result_file=ROOT / "louvain/crossover_louvain_results.partial.json",
             x_key="nodes",
             x_label="Nodos",
-            standalone_key="standalone_ms",
+            standalone_key="standalone_exec_ms",
             burst_span_key="burst_span_ms",
             burst_total_key="burst_total_ms",
-            speedup_key="speedup",
+            speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo planted-partition ponderado",
             theory="Louvain maximiza modularidad moviendo nodos entre comunidades y, en su formulación habitual, reagrupa la solución para refinarla jerárquicamente.",
@@ -605,6 +721,7 @@ def build_specs() -> list[ReportSpec]:
             dataset_note="Se usaron grafos planted-partition con semillas fijas y el mismo dataset por tamaño para ambas implementaciones.",
             validation_note="Las campañas cerradas hasta 200k validaron estrictamente la partición; además, una corrida manual posterior validó 300k y mostró el techo operativo burst antes de 400k.",
             crossover_key="crossover_estimate_nodes",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/louvain.json",
         ),
         ReportSpec(
             slug="gradientboosting",
@@ -650,18 +767,19 @@ def build_specs() -> list[ReportSpec]:
             result_file=ROOT / "unionfind/uf_crossover_validation_results.json",
             x_key="nodes",
             x_label="Nodos",
-            standalone_key="standalone_ms",
-            burst_span_key="burst_ms",
+            standalone_key="standalone_exec_ms",
+            burst_span_key="burst_span_ms",
             burst_total_key="burst_total_ms",
-            speedup_key="speedup",
+            speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo sintético por componentes disjuntas",
             theory="Union-Find mantiene componentes conexas mediante operaciones de unión y búsqueda de representante, normalmente optimizadas con union by rank y path compression.",
             standalone_desc="binario Rust local que procesa el grafo completo y devuelve la partición final.",
             burst_desc="acción distribuida que ejecuta uniones locales por partición y luego coordina la fusión global entre workers.",
             dataset_note="Los grafos sintéticos se generan una vez por tamaño con el mismo número de componentes y aristas por nodo para ambas implementaciones.",
-            validation_note="La validación fuerte usa hash canónico de la partición además del número de componentes. El benchmark ya quedó preparado para separar tiempo total y span, pero la campaña agregada actual todavía debe reejecutarse si se quiere una lectura estrictamente alineada con cold starts.",
+            validation_note="La validación fuerte usa hash canónico de la partición además del número de componentes. El benchmark ya quedó preparado para separar carga+ejecución de span, pero la campaña agregada actual todavía debe reejecutarse si se quiere una lectura estrictamente alineada con la métrica principal del TFM.",
             crossover_key="crossover_estimate",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/unionfind.json",
         ),
     ]
 
@@ -675,12 +793,14 @@ def generate_all() -> None:
         except ValueError as exc:
             print(f"Skipping {spec.slug}: {exc}")
             continue
+        spark_payload, spark_source = load_optional_spark_payload(spec)
         raw_copy = write_raw_copy(spec, payload)
-        figure = make_figure(spec, payload)
-        doc = write_markdown(spec, payload, figure)
+        figure = make_figure(spec, payload, spark_payload)
+        doc = write_markdown(spec, payload, figure, spark_payload)
         index[spec.slug] = {
             "result_file": str(source_path),
             "raw_copy": str(raw_copy),
+            "spark_result_file": str(spark_source) if spark_source else None,
             "figure": str(figure),
             "doc": str(doc),
             "points": len(payload.get("results", [])),

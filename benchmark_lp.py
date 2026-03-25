@@ -114,7 +114,7 @@ def benchmark_burst(
     bucket="test-bucket",
     key_prefix="graphs",
 ):
-    """Run burst Label Propagation and return execution time in ms"""
+    """Run burst Label Propagation and return (host_total_ms, warm_total_ms, span_ms)."""
     s3_prefix = f"{key_prefix}/large-{num_nodes}"
     
     params = generate_payload(
@@ -155,6 +155,7 @@ def benchmark_burst(
             return None, None
         
         # Calculate algorithmic time from worker timestamps
+        worker_starts = []
         algo_starts = []
         data_ready = []
         worker_ends = []
@@ -171,6 +172,8 @@ def benchmark_burst(
                     print(worker_data["results"])
                 
                 ts_map = {ts["key"]: int(ts["value"]) for ts in worker_data["timestamps"]}
+                if "worker_start" in ts_map:
+                    worker_starts.append(ts_map["worker_start"])
                 if "iter_0_start" in ts_map:
                     algo_starts.append(ts_map["iter_0_start"])
                 if "get_input_end" in ts_map:
@@ -178,17 +181,20 @@ def benchmark_burst(
                 if "worker_end" in ts_map:
                     worker_ends.append(ts_map["worker_end"])
         
+        warm_total = None
         algo_time = None
+        if worker_starts and worker_ends:
+            warm_total = max(worker_ends) - min(worker_starts)
         if worker_ends:
             if algo_starts:
                 algo_time = max(worker_ends) - min(algo_starts)
             elif data_ready:
                 algo_time = max(worker_ends) - min(data_ready)
             
-        return (finished - host_submit), algo_time
+        return (finished - host_submit), warm_total, algo_time
     except Exception as e:
         print(f"Error running burst: {e}", file=sys.stderr)
-        return None, None
+        return None, None, None
 
 
 def build_benchmark_summary(
@@ -198,7 +204,8 @@ def build_benchmark_summary(
     granularity,
     memory_mb,
     standalone_output,
-    burst_total_ms,
+    burst_host_total_ms,
+    burst_warm_total_ms,
     burst_algo_ms,
     validation_requested,
     validation_performed,
@@ -215,8 +222,8 @@ def build_benchmark_summary(
     total_speedup = None
     if standalone_exec_ms is not None and burst_algo_ms not in (None, 0):
         algo_speedup = standalone_exec_ms / burst_algo_ms
-    if standalone_total_ms is not None and burst_total_ms not in (None, 0):
-        total_speedup = standalone_total_ms / burst_total_ms
+    if standalone_total_ms is not None and burst_warm_total_ms not in (None, 0):
+        total_speedup = standalone_total_ms / burst_warm_total_ms
 
     return {
         "algorithm": "labelpropagation",
@@ -238,7 +245,8 @@ def build_benchmark_summary(
         },
         "burst": {
             "processing_time_ms": burst_algo_ms,
-            "total_time_ms": burst_total_ms,
+            "total_time_ms": burst_warm_total_ms,
+            "host_total_time_ms": burst_host_total_ms,
         },
         "speedup": {
             "algorithmic": algo_speedup,
@@ -286,14 +294,15 @@ if __name__ == "__main__":
             print("Standalone Processing Time (Execution): FAILED")
     
     # Benchmark burst
-    burst_time = None
+    burst_host_time = None
+    burst_warm_time = None
     algo_time = None
     validation_performed = False
     validation_passed = None
     validation_skipped_reason = None
     if not args.skip_burst:
         print(f"Running burst version...")
-        burst_time, algo_time = benchmark_burst(
+        burst_host_time, burst_warm_time, algo_time = benchmark_burst(
             args.nodes, 
             args.partitions, 
             args.iter, 
@@ -305,21 +314,24 @@ if __name__ == "__main__":
             args.bucket,
             args.key_prefix,
         )
-        if burst_time is not None:
-            print(f"Burst Time (Total): {burst_time} ms")
+        if burst_host_time is not None:
+            print(f"Burst Time (Host Total / Cold): {burst_host_time} ms")
+            if burst_warm_time is not None:
+                print(f"Burst Time (Load + Execution / Warm): {burst_warm_time} ms")
             if algo_time:
                 print(f"Burst Processing Time (Distributed Span): {algo_time} ms")
-                overhead = burst_time - algo_time
-                print(f"OpenWhisk Overhead: {overhead} ms ({(overhead/burst_time)*100:.1f}%)")
+                if burst_warm_time is not None:
+                    overhead = burst_warm_time - algo_time
+                    print(f"Warm Coordination Overhead: {overhead} ms ({(overhead/burst_warm_time)*100:.1f}%)")
         else:
             print("Burst Time: FAILED")
     
     # Calculate speedup
     if lpst_time:
-        if burst_time:
+        if burst_warm_time:
             standalone_total = standalone_output.get("total_time_ms", lpst_time) if standalone_output else lpst_time
-            speedup = standalone_total / burst_time
-            print(f"\nOverall Speedup: {speedup:.2f}x")
+            speedup = standalone_total / burst_warm_time
+            print(f"\nWarm Total Speedup (Load + Execution): {speedup:.2f}x")
         
         if algo_time:
             algo_speedup = lpst_time / algo_time
@@ -365,7 +377,8 @@ if __name__ == "__main__":
         granularity=args.granularity,
         memory_mb=args.memory,
         standalone_output=standalone_output,
-        burst_total_ms=burst_time,
+        burst_host_total_ms=burst_host_time,
+        burst_warm_total_ms=burst_warm_time,
         burst_algo_ms=algo_time,
         validation_requested=args.validate,
         validation_performed=validation_performed,

@@ -1,0 +1,82 @@
+import org.apache.spark.graphx.Edge
+import org.apache.spark.graphx.Graph
+
+val inputPath = sys.props.getOrElse("tfm.input", {
+  System.err.println("Missing -Dtfm.input")
+  System.exit(1)
+  ""
+})
+val outputPath = sys.props.getOrElse("tfm.output", {
+  System.err.println("Missing -Dtfm.output")
+  System.exit(1)
+  ""
+})
+val partitions = sys.props.getOrElse("tfm.partitions", "4").toInt
+val persistOutput = sys.props.get("tfm.persist").exists(_.toBoolean)
+val resultPrefix = "SPARK_BENCHMARK_RESULT_JSON:"
+
+def parseUndirectedEdges(line: String): Iterator[Edge[Int]] = {
+  val parts = line.trim.split('\t')
+  if (parts.length < 2) Iterator.empty
+  else {
+    val src = parts(0).toLong
+    val dst = parts(1).toLong
+    Iterator(Edge(src, dst, 1), Edge(dst, src, 1))
+  }
+}
+
+def jsonEscape(value: String): String =
+  value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+def fnv64(value: Long, acc: Long): Long = {
+  val mixed = acc ^ value
+  (mixed * 0x100000001b3L) & 0xffffffffffffffffL
+}
+
+val totalStartNs = System.nanoTime()
+val loadStartNs = System.nanoTime()
+
+val lines = sc.textFile(inputPath, partitions)
+val edges = lines.flatMap(parseUndirectedEdges).cache()
+
+val vertices = edges
+  .flatMap(edge => Iterator(edge.srcId, edge.dstId))
+  .distinct()
+  .map(vertexId => (vertexId, 0))
+
+val graph = Graph(vertices, edges).partitionBy(
+  org.apache.spark.graphx.PartitionStrategy.EdgePartition2D
+).cache()
+
+graph.vertices.count()
+val loadEndNs = System.nanoTime()
+
+val execStartNs = System.nanoTime()
+
+val components = graph.connectedComponents().vertices.cache()
+val componentCount = components.map { case (_, component) => component }.distinct().count()
+val componentHash = components
+  .sortByKey()
+  .map { case (_, component) => component }
+  .treeAggregate(0xcbf29ce484222325L)(
+    (acc, component) => fnv64(component, acc),
+    (left, right) => fnv64(right, left)
+  )
+
+if (persistOutput) {
+  components
+    .map { case (id, component) => s"$id\t$component" }
+    .saveAsTextFile(outputPath)
+}
+
+val execEndNs = System.nanoTime()
+
+val loadTimeMs = (loadEndNs - loadStartNs) / 1000000L
+val executionTimeMs = (execEndNs - execStartNs) / 1000000L
+val totalTimeMs = (execEndNs - totalStartNs) / 1000000L
+
+println(
+  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","load_time_ms":$loadTimeMs,"execution_time_ms":$executionTimeMs,"total_time_ms":$totalTimeMs,"num_components":$componentCount,"component_hash":"${java.lang.Long.toUnsignedString(componentHash, 16)}"}"""
+)
+
+System.exit(0)

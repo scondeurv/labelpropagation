@@ -12,6 +12,13 @@ from pathlib import Path
 
 ROOT = Path("/home/sergio/src")
 DEFAULT_VALIDATION_PYTHON = Path("/home/sergio/src/bfs/.venv/bin/python")
+DEFAULT_GRAPH_STEPS = (
+    "bfs,spark-bfs,"
+    "sssp,spark-sssp,"
+    "labelpropagation,spark-labelpropagation,"
+    "unionfind,spark-unionfind,"
+    "reports"
+)
 
 
 @dataclass(frozen=True)
@@ -27,9 +34,25 @@ def log(message: str) -> None:
 
 
 def repo_python(repo_name: str, validation_python: Path) -> Path:
-    candidate = ROOT / repo_name / ".venv/bin/python"
-    if candidate.exists():
-        return candidate
+    candidates = [
+        ROOT / repo_name / ".venv/bin/python",
+        ROOT / "labelpropagation/.venv/bin/python",
+        ROOT / "bfs/.venv/bin/python",
+    ]
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            probe = subprocess.run(
+                [str(candidate), "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if probe.returncode == 0:
+                return candidate
+        except Exception:
+            continue
     return validation_python
 
 
@@ -53,6 +76,12 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
             command=[str(repo_python("labelpropagation", validation_python)), "validate_crossover.py"],
             result_file=ROOT / "labelpropagation/crossover_validation_results.json",
         ),
+        "louvain": CampaignStep(
+            name="louvain",
+            workdir=ROOT / "louvain",
+            command=[str(repo_python("louvain", validation_python)), "validate_crossover_louvain.py"],
+            result_file=ROOT / "louvain/crossover_louvain_results.json",
+        ),
         "gradientboosting": CampaignStep(
             name="gradientboosting",
             workdir=ROOT / "gradientboosting",
@@ -71,6 +100,61 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
             command=[str(repo_python("unionfind", validation_python)), "validate_crossover.py"],
             result_file=ROOT / "unionfind/uf_crossover_validation_results.json",
         ),
+        "spark-bfs": CampaignStep(
+            name="spark-bfs",
+            workdir=ROOT / "labelpropagation",
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "spark_baseline/run_spark_graph_benchmarks.py",
+                "--algorithms",
+                "bfs",
+            ],
+            result_file=ROOT / "labelpropagation/spark_baseline/results/bfs.json",
+        ),
+        "spark-sssp": CampaignStep(
+            name="spark-sssp",
+            workdir=ROOT / "labelpropagation",
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "spark_baseline/run_spark_graph_benchmarks.py",
+                "--algorithms",
+                "sssp",
+            ],
+            result_file=ROOT / "labelpropagation/spark_baseline/results/sssp.json",
+        ),
+        "spark-labelpropagation": CampaignStep(
+            name="spark-labelpropagation",
+            workdir=ROOT / "labelpropagation",
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "spark_baseline/run_spark_graph_benchmarks.py",
+                "--algorithms",
+                "labelpropagation",
+            ],
+            result_file=ROOT / "labelpropagation/spark_baseline/results/labelpropagation.json",
+        ),
+        "spark-unionfind": CampaignStep(
+            name="spark-unionfind",
+            workdir=ROOT / "labelpropagation",
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "spark_baseline/run_spark_graph_benchmarks.py",
+                "--algorithms",
+                "unionfind",
+            ],
+            result_file=ROOT / "labelpropagation/spark_baseline/results/unionfind.json",
+        ),
+        "spark-louvain": CampaignStep(
+            name="spark-louvain",
+            workdir=ROOT / "labelpropagation",
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "spark_baseline/run_spark_graph_benchmarks.py",
+                "--algorithms",
+                "louvain",
+            ],
+            result_file=ROOT / "labelpropagation/spark_baseline/results/louvain.json",
+        ),
         "reports": CampaignStep(
             name="reports",
             workdir=ROOT / "labelpropagation",
@@ -88,13 +172,16 @@ def run_step(step: CampaignStep, validation_python: Path, force: bool) -> None:
     env = os.environ.copy()
     env["VALIDATION_PYTHON"] = str(validation_python)
     env.setdefault("MPLCONFIGDIR", "/tmp/mpl-benchmark-campaign")
+    command = list(step.command)
+    if force and step.name.startswith("spark-") and "--force" not in command:
+        command.append("--force")
 
     log(f"▶ Running {step.name}")
     log(f"   cwd: {step.workdir}")
-    log(f"   cmd: {' '.join(step.command)}")
+    log(f"   cmd: {' '.join(command)}")
 
     completed = subprocess.run(
-        step.command,
+        command,
         cwd=step.workdir,
         env=env,
         text=True,
@@ -114,11 +201,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--steps",
-        default="labelpropagation,gradientboosting,unionfind,reports",
+        default=DEFAULT_GRAPH_STEPS,
         help=(
             "Comma-separated steps to run. "
-            "Available: bfs,sssp,labelpropagation,gradientboosting,"
-            "collaborativefiltering,unionfind,reports"
+            "Available: bfs,sssp,labelpropagation,louvain,gradientboosting,"
+            "collaborativefiltering,unionfind,spark-bfs,spark-sssp,"
+            "spark-labelpropagation,spark-unionfind,spark-louvain,reports"
         ),
     )
     parser.add_argument(
