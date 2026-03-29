@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 4 ]]; then
-  echo "Usage: $0 <input-path-in-container> <output-path-in-container> <source-node> <partitions>" >&2
+if [[ $# -lt 5 ]]; then
+  echo "Usage: $0 <input-path-in-container> <output-path-in-container> <source-node> <partitions> <max-iter>" >&2
   exit 1
 fi
 
@@ -10,6 +10,7 @@ INPUT_PATH="$1"
 OUTPUT_PATH="$2"
 SOURCE_NODE="$3"
 PARTITIONS="$4"
+MAX_ITER="$5"
 
 SCRIPT_PATH="/opt/tfm-spark/scripts/sssp_graphx_shell.scala"
 TOTAL_EXECUTOR_CORES="${SPARK_TOTAL_EXECUTOR_CORES:-4}"
@@ -28,5 +29,5 @@ docker exec spark-master /opt/spark/bin/spark-shell \
   --conf spark.default.parallelism="$DEFAULT_PARALLELISM" \
   --conf spark.sql.shuffle.partitions="$SHUFFLE_PARTITIONS" \
   --conf spark.task.cpus=1 \
-  --driver-java-options "-Dtfm.input=$INPUT_PATH -Dtfm.output=$OUTPUT_PATH -Dtfm.source=$SOURCE_NODE -Dtfm.partitions=$PARTITIONS -Dtfm.persist=$PERSIST_OUTPUT" \
+  --driver-java-options "-Dtfm.input=$INPUT_PATH -Dtfm.output=$OUTPUT_PATH -Dtfm.source=$SOURCE_NODE -Dtfm.partitions=$PARTITIONS -Dtfm.max_iter=$MAX_ITER -Dtfm.persist=$PERSIST_OUTPUT" \
   -i "$SCRIPT_PATH"

@@ -1,5 +1,8 @@
 import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.Graph
+import java.io.PrintWriter
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 val inputPath = sys.props.getOrElse("tfm.input", {
   System.err.println("Missing -Dtfm.input")
@@ -33,6 +36,22 @@ def fnv64(value: Long, acc: Long): Long = {
   (mixed * 0x100000001b3L) & 0xffffffffffffffffL
 }
 
+def persistLinesFromDriver(outputDir: String, lines: Iterator[String]): Unit = {
+  val dirPath = Paths.get(outputDir)
+  Files.createDirectories(dirPath)
+  val partPath = dirPath.resolve("part-00000")
+  val writer = new PrintWriter(Files.newBufferedWriter(partPath, StandardCharsets.UTF_8))
+  try {
+    lines.foreach(writer.println)
+  } finally {
+    writer.close()
+  }
+  val successPath = dirPath.resolve("_SUCCESS")
+  if (!Files.exists(successPath)) {
+    Files.createFile(successPath)
+  }
+}
+
 val totalStartNs = System.nanoTime()
 val loadStartNs = System.nanoTime()
 
@@ -64,9 +83,13 @@ val componentHash = components
   )
 
 if (persistOutput) {
-  components
-    .map { case (id, component) => s"$id\t$component" }
-    .saveAsTextFile(outputPath)
+  persistLinesFromDriver(
+    outputPath,
+    components
+      .sortByKey()
+      .toLocalIterator
+      .map { case (id, component) => s"$id\t$component" }
+  )
 }
 
 val execEndNs = System.nanoTime()

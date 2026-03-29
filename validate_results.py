@@ -4,13 +4,22 @@ Validate Label Propagation results by comparing burst vs standalone outputs
 """
 import argparse
 import json
+import os
 import sys
 import boto3
 from collections import Counter
+from botocore.config import Config
 
 def download_burst_labels(bucket, key, endpoint):
     """Download burst results from S3"""
-    s3_client = boto3.client('s3', endpoint_url=endpoint)
+    s3_client = boto3.client(
+        's3',
+        endpoint_url=endpoint,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        config=Config(signature_version='s3v4'),
+    )
     output_key = f"{key}/output/labels_final.json"
     
     try:

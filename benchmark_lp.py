@@ -197,6 +197,12 @@ def benchmark_burst(
         return None, None, None
 
 
+def pick_winner(speedup):
+    if speedup is None:
+        return None
+    return "Burst" if speedup > 1.0 else "Standalone"
+
+
 def build_benchmark_summary(
     nodes,
     iterations,
@@ -219,11 +225,23 @@ def build_benchmark_summary(
         standalone_total_ms = standalone_output.get("total_time_ms")
 
     algo_speedup = None
-    total_speedup = None
+    warm_speedup = None
+    cold_speedup = None
     if standalone_exec_ms is not None and burst_algo_ms not in (None, 0):
         algo_speedup = standalone_exec_ms / burst_algo_ms
     if standalone_total_ms is not None and burst_warm_total_ms not in (None, 0):
-        total_speedup = standalone_total_ms / burst_warm_total_ms
+        warm_speedup = standalone_total_ms / burst_warm_total_ms
+    if standalone_total_ms is not None and burst_host_total_ms not in (None, 0):
+        cold_speedup = standalone_total_ms / burst_host_total_ms
+
+    primary_metric = "total" if cold_speedup is not None else ("warm" if warm_speedup is not None else "span")
+    primary_winner = (
+        pick_winner(cold_speedup)
+        if primary_metric == "total"
+        else pick_winner(warm_speedup)
+        if primary_metric == "warm"
+        else pick_winner(algo_speedup)
+    )
 
     return {
         "algorithm": "labelpropagation",
@@ -250,13 +268,23 @@ def build_benchmark_summary(
         },
         "speedup": {
             "algorithmic": algo_speedup,
-            "overall": total_speedup,
+            "warm_total": warm_speedup,
+            "cold_total": cold_speedup,
+            "overall": cold_speedup if cold_speedup is not None else warm_speedup,
+        },
+        "winner": {
+            "span": pick_winner(algo_speedup),
+            "warm": pick_winner(warm_speedup),
+            "total": pick_winner(cold_speedup),
+            "primary_metric": primary_metric,
+            "primary": primary_winner,
         },
         "validation": {
             "requested": validation_requested,
             "performed": validation_performed,
             "passed": validation_passed,
             "skipped_reason": validation_skipped_reason,
+            "mode": "exact" if validation_performed else None,
         },
     }
 
@@ -344,29 +372,22 @@ if __name__ == "__main__":
     
     # Validation
     if args.validate:
-        # Skip validation for very large graphs (too slow for standalone)
-        if args.nodes > 5000:
-            validation_skipped_reason = (
-                f"skipped for {args.nodes} nodes because the standalone reference check is too expensive"
-            )
-            print(f"\n⚠ Skipping validation for {args.nodes} nodes (too large for standalone reference)")
-        else:
-            print("\n=== Running Validation ===")
-            validation_performed = True
-            key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-            validation_passed = run_validation(
-                standalone_output,
-                graph_file,
-                args.nodes,
-                args.iter,
-                args.bucket,
-                key_prefix,
-                args.validation_endpoint,
-            )
-            if not validation_passed:
-                print("\n✗ VALIDATION FAILED - Results do not match!")
-                sys.exit(1)
-            print("\n✓ VALIDATION PASSED - Results match!")
+        print("\n=== Running Exact Validation ===")
+        validation_performed = True
+        key_prefix = f"{args.key_prefix}/large-{args.nodes}"
+        validation_passed = run_validation(
+            standalone_output,
+            graph_file,
+            args.nodes,
+            args.iter,
+            args.bucket,
+            key_prefix,
+            args.validation_endpoint,
+        )
+        if not validation_passed:
+            print("\n✗ VALIDATION FAILED - Results do not match!")
+            sys.exit(1)
+        print("\n✓ VALIDATION PASSED - Results match!")
     else:
         validation_skipped_reason = "validation not requested"
 

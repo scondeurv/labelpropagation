@@ -17,7 +17,19 @@ import time
 from datetime import datetime
 
 
-TEST_POINTS = [
+def env_test_points(default: list[int]) -> list[int]:
+    raw = os.environ.get("TFM_TEST_POINTS", "").strip()
+    if not raw:
+        return default
+    return [int(token.strip()) for token in raw.split(",") if token.strip()]
+
+
+def env_runs(default: int) -> int:
+    raw = os.environ.get("TFM_RUNS", "").strip()
+    return int(raw) if raw else default
+
+
+TEST_POINTS = env_test_points([
     100_000,
     500_000,
     1_000_000,
@@ -26,9 +38,9 @@ TEST_POINTS = [
     4_000_000,
     4_500_000,
     5_000_000,
-]
+])
 
-RUNS = 5
+RUNS = env_runs(5)
 
 PARTITIONS = 4
 MAX_ITER = 10
@@ -44,6 +56,12 @@ BENCHMARK_JSON_PREFIX = "BENCHMARK_RESULT_JSON:"
 def log(message: str) -> None:
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
+
+
+def winner_for(speedup: float | None) -> str | None:
+    if speedup is None:
+        return None
+    return "Burst" if speedup > 1.0 else "Standalone"
 
 
 def crossing_intervals(results: list[dict], x_key: str) -> list[tuple[dict, dict]]:
@@ -150,13 +168,19 @@ def run_benchmark(nodes: int, skip_generate: bool = False) -> dict | None:
     if standalone_exec is not None and standalone_time is not None and burst_time is not None:
         speedup_span = (standalone_exec / burst_span) if burst_span not in (None, 0) else None
         speedup_warm = standalone_time / burst_time if burst_time > 0 else 0.0
-        winner = "Burst" if speedup_warm > 1.0 else "Standalone"
+        speedup_total = standalone_time / burst_host_total if burst_host_total not in (None, 0) else None
+        winner_span = winner_for(speedup_span)
+        winner_warm = winner_for(speedup_warm)
+        winner_total = winner_for(speedup_total)
+        winner_primary = winner_total if winner_total is not None else winner_warm if winner_warm is not None else winner_span
         log(f"\n📊 Results for {nodes / 1e6:.1f}M nodes:")
         log(f"   Standalone (load + exec): {standalone_time:.2f} ms")
         log(f"   Burst warm total:         {burst_time:.2f} ms")
         if burst_span is not None:
             log(f"   Burst span:               {burst_span:.2f} ms")
-        log(f"   Speedup (warm): {speedup_warm:.2f}x  →  {winner} ✅")
+        if speedup_total is not None:
+            log(f"   Speedup (cold): {speedup_total:.2f}x  →  {winner_total} ✅")
+        log(f"   Speedup (warm): {speedup_warm:.2f}x")
         if speedup_span is not None:
             log(f"   Speedup (span): {speedup_span:.2f}x")
         return {
@@ -170,9 +194,14 @@ def run_benchmark(nodes: int, skip_generate: bool = False) -> dict | None:
             "burst_warm_ms": burst_time,
             "speedup": speedup_span,
             "speedup_span": speedup_span,
-            "speedup_total": benchmark_summary.get("standalone", {}).get("total_time_ms") / burst_host_total if burst_host_total not in (None, 0) else None,
+            "speedup_total": speedup_total,
             "speedup_warm": speedup_warm,
-            "winner": winner,
+            "winner_span": winner_span,
+            "winner_warm": winner_warm,
+            "winner_total": winner_total,
+            "winner_primary": winner_primary,
+            "primary_metric": "total" if winner_total is not None else "warm",
+            "winner": winner_primary,
             "validation": benchmark_summary.get("validation", {}),
         }
 
@@ -236,12 +265,17 @@ def main() -> None:
         speedup_total = None
         if sa_total_mean is not None and bs_total_mean not in (None, 0):
             speedup_total = sa_total_mean / bs_total_mean
-        winner = "Burst" if speedup_warm > 1.0 else "Standalone"
+        winner_span = winner_for(speedup)
+        winner_warm = winner_for(speedup_warm)
+        winner_total = winner_for(speedup_total)
+        winner_primary = winner_total if winner_total is not None else winner_warm if winner_warm is not None else winner_span
 
         log(f"\n📊 Aggregate {nodes / 1e6:.1f}M ({len(sa_total_times)} runs):")
         log(f"   Standalone total: {sa_total_mean:.1f} ± {sa_total_std:.1f} ms  (runs: {[f'{v:.0f}' for v in sa_total_times]})")
         log(f"   Burst warm total: {bs_warm_mean:.1f} ± {bs_warm_std:.1f} ms  (runs: {[f'{v:.0f}' for v in bs_warm_times]})")
-        log(f"   Speedup (warm): {speedup_warm:.2f}x  →  {winner}")
+        if speedup_total is not None:
+            log(f"   Speedup (cold): {speedup_total:.2f}x  →  {winner_total}")
+        log(f"   Speedup (warm): {speedup_warm:.2f}x")
         log(f"   Span secondary: SA exec {sa_exec_mean:.1f} ± {sa_exec_std:.1f} ms vs Burst span {bs_span_mean:.1f} ± {bs_span_std:.1f} ms")
 
         aggregated.append({
@@ -256,12 +290,17 @@ def main() -> None:
             "burst_runs_ms": bs_span_times,
             "speedup": round(speedup, 4),
             "speedup_span": round(speedup, 4),
-            "winner": winner,
             "standalone_total_ms": round(sa_total_mean, 2) if sa_total_mean is not None else None,
             "burst_total_ms": round(bs_total_mean, 2) if bs_total_mean is not None else None,
             "speedup_total": round(speedup_total, 4) if speedup_total is not None else None,
             "burst_warm_ms": round(bs_warm_mean, 2),
             "speedup_warm": round(speedup_warm, 4),
+            "winner_span": winner_span,
+            "winner_warm": winner_warm,
+            "winner_total": winner_total,
+            "winner_primary": winner_primary,
+            "primary_metric": "total" if winner_total is not None else "warm",
+            "winner": winner_primary,
             "validation": validation_state or {},
         })
         time.sleep(5)

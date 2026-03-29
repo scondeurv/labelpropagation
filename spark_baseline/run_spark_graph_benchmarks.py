@@ -81,6 +81,30 @@ def mean_std(values: list[float]) -> tuple[float, float]:
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    os.chmod(RESULTS_DIR, 0o777)
+
+
+def remove_output_dir(host_output_dir: Path, container_output_dir: str) -> None:
+    if not host_output_dir.exists():
+        return
+    try:
+        shutil.rmtree(host_output_dir)
+        return
+    except PermissionError:
+        pass
+
+    cleanup = subprocess.run(
+        ["docker", "exec", "spark-master", "rm", "-rf", container_output_dir],
+        text=True,
+        capture_output=True,
+    )
+    if cleanup.returncode != 0:
+        raise RuntimeError(
+            f"failed to clean Spark output directory {container_output_dir}\n"
+            f"STDOUT:\n{cleanup.stdout}\nSTDERR:\n{cleanup.stderr}"
+        )
+    if host_output_dir.exists():
+        shutil.rmtree(host_output_dir)
 
 
 def parse_result(stdout: str) -> dict[str, Any]:
@@ -283,7 +307,8 @@ def validate_sssp_spark_output(
     mismatches = []
     for node in range(num_nodes):
         spark_distance = spark_distance_map.get(node, math.inf)
-        standalone_distance = standalone_distances[node]
+        standalone_distance_raw = standalone_distances[node]
+        standalone_distance = math.inf if standalone_distance_raw is None else float(standalone_distance_raw)
         if spark_distance == standalone_distance:
             continue
         if isinstance(standalone_distance, (int, float)) and isinstance(spark_distance, (int, float)):
@@ -435,8 +460,7 @@ def benchmark_point(
     for run_idx in range(runs):
         output_path = f"/opt/tfm-spark/results/{algorithm.slug}_{size}_run{run_idx + 1}"
         host_output_dir = RESULTS_DIR / f"{algorithm.slug}_{size}_run{run_idx + 1}"
-        if host_output_dir.exists():
-            shutil.rmtree(host_output_dir)
+        remove_output_dir(host_output_dir, output_path)
         command = ["bash", str(HERE / "scripts" / algorithm.submit_script), *algorithm.submit_args_fn(container_input, output_path, size)]
         log(f"Running Spark {algorithm.slug} size={size:,} run={run_idx + 1}/{runs}")
         env = os.environ.copy()
@@ -501,6 +525,12 @@ def benchmark_point(
     load_mean, load_std = mean_std(load_runs)
     exec_mean, exec_std = mean_std(exec_runs)
     total_mean, total_std = mean_std(total_runs)
+    validated_load = float(load_runs[0]) if load_runs else None
+    validated_exec = float(exec_runs[0]) if exec_runs else None
+    validated_total = float(total_runs[0]) if total_runs else None
+    unvalidated_load_mean, unvalidated_load_std = mean_std(load_runs[1:]) if len(load_runs) > 1 else (0.0, 0.0)
+    unvalidated_exec_mean, unvalidated_exec_std = mean_std(exec_runs[1:]) if len(exec_runs) > 1 else (0.0, 0.0)
+    unvalidated_total_mean, unvalidated_total_std = mean_std(total_runs[1:]) if len(total_runs) > 1 else (0.0, 0.0)
     row = {
         algorithm.x_key: size,
         "spark_load_ms": round(load_mean, 2),
@@ -512,6 +542,15 @@ def benchmark_point(
         "spark_load_runs_ms": [round(value, 2) for value in load_runs],
         "spark_exec_runs_ms": [round(value, 2) for value in exec_runs],
         "spark_total_runs_ms": [round(value, 2) for value in total_runs],
+        "spark_load_validated_run_ms": round(validated_load, 2) if validated_load is not None else None,
+        "spark_exec_validated_run_ms": round(validated_exec, 2) if validated_exec is not None else None,
+        "spark_total_validated_run_ms": round(validated_total, 2) if validated_total is not None else None,
+        "spark_load_avg_unvalidated_ms": round(unvalidated_load_mean, 2) if len(load_runs) > 1 else None,
+        "spark_load_std_unvalidated_ms": round(unvalidated_load_std, 2) if len(load_runs) > 1 else None,
+        "spark_exec_avg_unvalidated_ms": round(unvalidated_exec_mean, 2) if len(exec_runs) > 1 else None,
+        "spark_exec_std_unvalidated_ms": round(unvalidated_exec_std, 2) if len(exec_runs) > 1 else None,
+        "spark_total_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
+        "spark_total_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
     }
     if last_payload:
         for key in ("visited_nodes", "max_level", "reachable_nodes", "max_distance", "iterations", "converged", "labeled_nodes", "distinct_labels", "num_components", "component_hash"):
@@ -658,10 +697,12 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                 output_path,
                 "0",
                 "4",
+                "500",
             ],
             configuration={
                 "partitions": 4,
                 "source_node": 0,
+                "max_iter": 500,
                 "density": 10,
                 "max_weight": 10.0,
                 "spark_env": {
@@ -740,7 +781,7 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                 "spark_env": {
                     "SPARK_TOTAL_EXECUTOR_CORES": "4",
                     "SPARK_EXECUTOR_CORES": "1",
-                    "SPARK_EXECUTOR_MEMORY": "2g",
+                    "SPARK_EXECUTOR_MEMORY": "4g",
                     "SPARK_DEFAULT_PARALLELISM": "4",
                     "SPARK_SHUFFLE_PARTITIONS": "4",
                 },

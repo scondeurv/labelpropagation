@@ -19,6 +19,7 @@ DEFAULT_GRAPH_STEPS = (
     "unionfind,spark-unionfind,"
     "reports"
 )
+DEFAULT_REPORT_SLUGS = "bfs,sssp,labelpropagation,unionfind"
 
 
 @dataclass(frozen=True)
@@ -158,7 +159,12 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
         "reports": CampaignStep(
             name="reports",
             workdir=ROOT / "labelpropagation",
-            command=[str(repo_python("labelpropagation", validation_python)), "generate_crossover_reports.py"],
+            command=[
+                str(repo_python("labelpropagation", validation_python)),
+                "generate_crossover_reports.py",
+                "--slugs",
+                DEFAULT_REPORT_SLUGS,
+            ],
             result_file=ROOT / "labelpropagation/benchmark_reports/raw/index.json",
         ),
     }

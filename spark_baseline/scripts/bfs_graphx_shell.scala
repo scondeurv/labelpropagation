@@ -2,6 +2,9 @@ import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx.VertexId
 import scala.math.min
+import java.io.PrintWriter
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 
 val inputPath = sys.props.getOrElse("tfm.input", {
   System.err.println("Missing -Dtfm.input")
@@ -32,6 +35,22 @@ def parseEdge(line: String): Option[Edge[Int]] = {
 
 def jsonEscape(value: String): String =
   value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+def persistLinesFromDriver(outputDir: String, lines: Iterator[String]): Unit = {
+  val dirPath = Paths.get(outputDir)
+  Files.createDirectories(dirPath)
+  val partPath = dirPath.resolve("part-00000")
+  val writer = new PrintWriter(Files.newBufferedWriter(partPath, StandardCharsets.UTF_8))
+  try {
+    lines.foreach(writer.println)
+  } finally {
+    writer.close()
+  }
+  val successPath = dirPath.resolve("_SUCCESS")
+  if (!Files.exists(successPath)) {
+    Files.createFile(successPath)
+  }
+}
 
 val totalStartNs = System.nanoTime()
 val loadStartNs = System.nanoTime()
@@ -78,12 +97,16 @@ val visitedNodes = reachable.count()
 val maxLevel = if (visitedNodes > 0) reachable.map(_._2).max() else 0
 
 if (persistOutput) {
-  levels
-    .map { case (id, level) =>
+  persistLinesFromDriver(
+    outputPath,
+    levels
+      .sortByKey()
+      .toLocalIterator
+      .map { case (id, level) =>
       val rendered = if (level == inf) "UNVISITED" else level.toString
       s"$id\t$rendered"
-    }
-    .saveAsTextFile(outputPath)
+      }
+  )
 }
 
 val execEndNs = System.nanoTime()

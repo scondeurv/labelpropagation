@@ -12,6 +12,11 @@ Este baseline prioriza una configuración reproducible y sencilla:
 - `GraphX` como API base
 - primer job listo: `SSSPGraphXJob`
 
+Para la campaña comparable del TFM, el clúster local se ajusta a un presupuesto
+operativo común de `4` CPU lógicas y `16 GiB` de RAM para Spark, alineado con
+las campañas Burst de grafos (`4` particiones, `1` CPU por acción y `4096 MiB`
+por worker en BFS/SSSP/Label Propagation).
+
 ## Estructura
 
 - `docker-compose.yml`: cluster local `master + 4 workers`
