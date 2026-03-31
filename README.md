@@ -1,20 +1,23 @@
 # Label Propagation - Flujo Estandar de Benchmarks
 
-Este repositorio queda normalizado con 6 scripts Python para el flujo completo:
+Este repositorio queda normalizado con 3 grupos de scripts para el flujo completo:
 
-1. `generate_test_data.py`: genera datos locales de prueba.
-2. `upload_to_minio.py`: genera y sube datos a MinIO/S3.
-3. `run_standalone.py`: ejecuta solo la version standalone.
-4. `run_burst.py`: ejecuta solo la version burst.
-5. `run_benchmark_round.py`: ejecuta una ronda comparativa completa.
-6. `plot_benchmark_results.py`: genera los graficos estandar.
+1. Preparacion de datos:
+   - `setup_large_lp_data.py`
+   - `upload_to_minio.py`
+2. Ejecucion:
+   - `run_standalone.py`
+   - `run_burst.py`
+   - `validate_crossover.py`
+3. Visualizacion:
+   - `plot_new_results.py`
 
 ## Orden recomendado
 
 1. Generar datos locales:
 
 ```bash
-python3 generate_test_data.py --nodes 1000000 --partitions 4 --density 10
+python3 setup_large_lp_data.py --nodes 1000000 --partitions 4 --no-s3 --density 10
 1. Subir a MinIO/S3:
 
 ```bash
@@ -36,13 +39,13 @@ python3 run_burst.py --nodes 1000000 --partitions 4 --memory 4096 --s3-endpoint 
 1. Ejecutar ronda comparativa:
 
 ```bash
-python3 run_benchmark_round.py
+python3 validate_crossover.py
 ```
 
 1. Generar graficos estandar:
 
 ```bash
-python3 plot_benchmark_results.py
+python3 plot_new_results.py
 ```
 
 ## Equivalencia de argumentos entre algoritmos
@@ -64,7 +67,8 @@ Referencia rapida de este repo (LP): `nodes` + `partitions` + `memory`.
 ## Notas
 
 - Los puntos de corte se calculan sobre mediciones reales, no sobre valores hardcodeados.
-- `run_benchmark_round.py` escribe resultados en `crossover_validation_results.json`.
+- `validate_crossover.py` escribe resultados en `crossover_validation_results.json`.
+- El barrido nuevo de recursos esta en `run_resource_sweep_campaign.py` y deja sus artefactos en `resource_sweep/`.
 
 ## Troubleshooting rapido
 

@@ -13,12 +13,12 @@ AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
 
 def generate_payload(endpoint, partitions, num_nodes, bucket, key, convergence_threshold=DEFAULT_CONVERGENCE_THRESHOLD, max_iterations=None, granularity=1):
     payload_list = []
-    num_requests = partitions // granularity
+    num_requests = partitions
     
     for i in range(num_requests):
         payload_list.append(
             {
-                "group_id": i,
+                "group_id": i // granularity,
                 "partitions": partitions,
                 "granularity": granularity,
                 "num_nodes": num_nodes,

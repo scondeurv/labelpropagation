@@ -14,14 +14,18 @@ from spark_baseline.run_spark_graph_benchmarks import build_algorithms, ensure_d
 
 
 ROOT = Path("/home/sergio/src")
-PLAN_ALGORITHMS = ("bfs", "sssp", "labelpropagation", "unionfind")
+PLAN_ALGORITHMS = ("bfs", "sssp", "wcc")
+BENCHMARK_REPOS = {
+    "bfs": "bfs",
+    "sssp": "sssp",
+    "wcc": "unionfind",
+}
 PLAN_POINTS = [100_000, 500_000, 1_000_000, 2_000_000]
 SMOKE_POINTS = [100_000]
 BURST_SCRIPTS = {
     "bfs": ("bfs", "validate_crossover_bfs.py"),
     "sssp": ("sssp", "validate_crossover_sssp.py"),
-    "labelpropagation": ("labelpropagation", "validate_crossover.py"),
-    "unionfind": ("unionfind", "validate_crossover.py"),
+    "wcc": ("unionfind", "validate_crossover.py"),
 }
 RESET_GLOBS = {
     "bfs": (
@@ -37,20 +41,10 @@ RESET_GLOBS = {
         "runlogs/*",
         "exploratory_logs_20260320/*",
     ),
-    "labelpropagation": (
-        "large_*.txt",
-        "crossover_*.json",
-        "validation_report.json",
-        "validation_run.log",
-        "validation_*.log",
-        "benchmark_lp_*.log",
-        "benchmark_reports/docs/*",
-        "benchmark_reports/figures/*",
-        "benchmark_reports/raw/*",
-        "crossover_data.json",
-    ),
-    "unionfind": (
+    "wcc": (
+        "wcc_graph_*.tsv",
         "uf_graph_*.tsv",
+        "wcc_crossover_*.json",
         "uf_crossover_*.json",
     ),
 }
@@ -87,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--algorithms",
         default=",".join(PLAN_ALGORITHMS),
-        help="Comma-separated subset of bfs,sssp,labelpropagation,unionfind.",
+        help="Comma-separated subset of bfs,sssp,wcc.",
     )
     parser.add_argument(
         "--validation-python",
@@ -105,7 +99,11 @@ def selected_algorithms(raw: str) -> list[str]:
     unknown = [name for name in requested if name not in PLAN_ALGORITHMS]
     if unknown:
         raise SystemExit(f"Unknown algorithms: {', '.join(unknown)}")
-    return requested
+    deduped: list[str] = []
+    for name in requested:
+        if name not in deduped:
+            deduped.append(name)
+    return deduped
 
 
 def run_burst_phase(algorithms: list[str], validation_python: Path, *, smoke: bool) -> None:
@@ -121,8 +119,17 @@ def run_burst_phase(algorithms: list[str], validation_python: Path, *, smoke: bo
         repo_name, script = BURST_SCRIPTS[algorithm]
         workdir = ROOT / repo_name
         command = [str(repo_python(repo_name, validation_python)), script]
+        run_env = env.copy()
+        if algorithm == "wcc":
+            run_env.update(
+                {
+                    "WCC_BENCHMARK_TITLE": "WCC",
+                    "WCC_OUTPUT_FILE": "wcc_crossover_validation_results.json",
+                    "WCC_INTERMEDIATE_PREFIX": "wcc_crossover",
+                }
+            )
         log(f"Running burst {algorithm}: {' '.join(command)}")
-        completed = subprocess.run(command, cwd=workdir, env=env, text=True)
+        completed = subprocess.run(command, cwd=workdir, env=run_env, text=True)
         if completed.returncode != 0:
             raise SystemExit(f"Burst phase failed for {algorithm} with exit code {completed.returncode}")
 
@@ -157,7 +164,7 @@ def remove_path(path: Path, *, dry_run: bool, removed: list[Path], blocked: list
 
 
 def reset_repo_artifacts(repo_name: str, *, dry_run: bool, removed: list[Path], blocked: list[Path]) -> None:
-    repo_root = ROOT / repo_name
+    repo_root = ROOT / BENCHMARK_REPOS[repo_name]
     for pattern in RESET_GLOBS[repo_name]:
         for path in sorted(repo_root.glob(pattern)):
             remove_path(path, dry_run=dry_run, removed=removed, blocked=blocked)
@@ -197,7 +204,7 @@ def run_reset(*, dry_run: bool) -> None:
 def collect_reset_leftovers() -> list[Path]:
     leftovers: list[Path] = []
     for repo_name in PLAN_ALGORITHMS:
-        repo_root = ROOT / repo_name
+        repo_root = ROOT / BENCHMARK_REPOS[repo_name]
         for pattern in RESET_GLOBS[repo_name]:
             leftovers.extend(sorted(repo_root.glob(pattern)))
     for directory in SPARK_RESET_DIRS:

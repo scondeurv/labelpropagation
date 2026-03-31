@@ -8,13 +8,123 @@ import tempfile
 import subprocess
 import sys
 import os
+from pathlib import Path
+import boto3
+from botocore.config import Config
 from ow_client.openwhisk_executor import OpenwhiskExecutor
 from ow_client.time_helper import get_millis
 from labelpropagation_utils import generate_payload
 
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+if str(HERE) not in sys.path:
+    sys.path.append(str(HERE))
+
+from runtime_metrics import compute_phase_breakdown, estimate_logical_traffic_bytes
+
 DEFAULT_WORKER_S3_ENDPOINT = os.environ.get("S3_WORKER_ENDPOINT", "http://minio-service.default.svc.cluster.local:9000")
 DEFAULT_HOST_S3_ENDPOINT = os.environ.get("S3_HOST_ENDPOINT", "http://localhost:9000")
 BENCHMARK_JSON_PREFIX = "BENCHMARK_RESULT_JSON:"
+CLEAN_BURST_CLUSTER_SCRIPT = ROOT / "clean_burst_cluster.sh"
+
+
+def delete_burst_output(bucket, key, endpoint):
+    """Delete previous LP output object to avoid validating stale results."""
+    s3_client = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        config=Config(signature_version="s3v4"),
+    )
+    output_key = f"{key}/output/labels_final.json"
+    try:
+        s3_client.delete_object(Bucket=bucket, Key=output_key)
+        print(f"Deleted previous burst output: s3://{bucket}/{output_key}")
+    except Exception as exc:
+        print(f"Warning: could not delete previous burst output {output_key}: {exc}", file=sys.stderr)
+
+
+def clean_burst_cluster():
+    """Delete stale guest/prewarm OpenWhisk pods before a Burst run."""
+    result = subprocess.run(
+        ["bash", str(CLEAN_BURST_CLUSTER_SCRIPT)],
+        capture_output=True,
+        text=True,
+        cwd=ROOT,
+    )
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
+        raise RuntimeError("failed to clean Burst cluster before running labelpropagation")
+
+
+def _make_s3_client(endpoint):
+    endpoint_url = endpoint if endpoint.startswith("http") else f"http://{endpoint}"
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint_url,
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin"),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin"),
+        region_name=os.environ.get("AWS_REGION", "us-east-1"),
+        config=Config(signature_version="s3v4"),
+    )
+
+
+def lp_partitions_available(bucket, key_prefix, endpoint, partitions):
+    try:
+        s3 = _make_s3_client(endpoint)
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=f"{key_prefix}/part-")
+        keys = {
+            item["Key"]
+            for item in response.get("Contents", [])
+            if item.get("Key", "").startswith(f"{key_prefix}/part-")
+        }
+        expected = {f"{key_prefix}/part-{part_id:05d}" for part_id in range(partitions)}
+        if keys != expected:
+            return False
+        for part_id in range(partitions):
+            head = s3.head_object(Bucket=bucket, Key=f"{key_prefix}/part-{part_id:05d}")
+            if int(head.get("ContentLength", 0)) <= 0:
+                return False
+        return True
+    except Exception:
+        return False
+
+
+def ensure_input_data(num_nodes, partitions, bucket, endpoint, key_prefix, graph_file, density=20):
+    s3_prefix = f"{key_prefix}/large-{num_nodes}"
+    local_ready = os.path.exists(graph_file) and os.path.getsize(graph_file) > 0
+    s3_ready = lp_partitions_available(bucket, s3_prefix, endpoint, partitions)
+    if local_ready and s3_ready:
+        return
+
+    print("Preparing LP input data...")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "setup_large_lp_data.py",
+            "--nodes", str(num_nodes),
+            "--partitions", str(partitions),
+            "--bucket", bucket,
+            "--endpoint", endpoint,
+            "--density", str(density),
+            "--prefix", s3_prefix,
+            "--output", graph_file,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=HERE,
+        timeout=1800,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "failed to prepare LP input data\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
 
 def benchmark_standalone(graph_file, num_nodes, max_iter):
     """Run standalone Label Propagation and return the full output dict."""
@@ -113,6 +223,8 @@ def benchmark_burst(
     s3_endpoint="http://minio-service.default.svc.cluster.local:9000",
     bucket="test-bucket",
     key_prefix="graphs",
+    backend="redis-list",
+    chunk_size=1024,
 ):
     """Run burst Label Propagation and return (host_total_ms, warm_total_ms, span_ms)."""
     s3_prefix = f"{key_prefix}/large-{num_nodes}"
@@ -141,8 +253,8 @@ def benchmark_burst(
             debug_mode=True,
             burst_size=granularity,
             join=False,
-            backend="redis-list",
-            chunk_size=1024,
+            backend=backend,
+            chunk_size=chunk_size,
             is_zip=True,
             timeout=900000
         )
@@ -152,49 +264,28 @@ def benchmark_burst(
         results = dt.get_results()
         if not results:
             print("Error: No results from burst execution", file=sys.stderr)
-            return None, None
-        
-        # Calculate algorithmic time from worker timestamps
-        worker_starts = []
-        algo_starts = []
-        data_ready = []
-        worker_ends = []
-        
+            return None, None, None, None
+
         for r in results:
-            # results might be [[worker0_out], [worker1_out]] because the action returns a list
-            worker_data = r
-            if isinstance(r, list) and len(r) > 0:
-                worker_data = r[0]
-                
-            if isinstance(worker_data, dict) and "timestamps" in worker_data:
-                # Print results report if present (from root worker)
-                if "results" in worker_data and worker_data["results"]:
-                    print(worker_data["results"])
-                
-                ts_map = {ts["key"]: int(ts["value"]) for ts in worker_data["timestamps"]}
-                if "worker_start" in ts_map:
-                    worker_starts.append(ts_map["worker_start"])
-                if "iter_0_start" in ts_map:
-                    algo_starts.append(ts_map["iter_0_start"])
-                if "get_input_end" in ts_map:
-                    data_ready.append(ts_map["get_input_end"])
-                if "worker_end" in ts_map:
-                    worker_ends.append(ts_map["worker_end"])
-        
-        warm_total = None
-        algo_time = None
-        if worker_starts and worker_ends:
-            warm_total = max(worker_ends) - min(worker_starts)
-        if worker_ends:
-            if algo_starts:
-                algo_time = max(worker_ends) - min(algo_starts)
-            elif data_ready:
-                algo_time = max(worker_ends) - min(data_ready)
-            
-        return (finished - host_submit), warm_total, algo_time
+            worker_data = r[0] if isinstance(r, list) and r else r
+            if isinstance(worker_data, dict) and worker_data.get("results"):
+                print(worker_data["results"])
+
+        phase_metrics = compute_phase_breakdown(
+            results,
+            host_submit_ms=host_submit,
+            host_finished_ms=finished,
+        )
+
+        return (
+            finished - host_submit,
+            phase_metrics.get("warm_total_ms"),
+            phase_metrics.get("span_ms"),
+            phase_metrics,
+        )
     except Exception as e:
         print(f"Error running burst: {e}", file=sys.stderr)
-        return None, None, None
+        return None, None, None, None
 
 
 def pick_winner(speedup):
@@ -217,6 +308,9 @@ def build_benchmark_summary(
     validation_performed,
     validation_passed,
     validation_skipped_reason,
+    phase_metrics,
+    backend,
+    chunk_size,
 ):
     standalone_exec_ms = None
     standalone_total_ms = None
@@ -242,6 +336,13 @@ def build_benchmark_summary(
         if primary_metric == "warm"
         else pick_winner(algo_speedup)
     )
+    workers = partitions // granularity if granularity else partitions
+    traffic = estimate_logical_traffic_bytes(
+        algorithm="labelpropagation",
+        num_nodes=nodes,
+        workers=workers,
+        iterations=(phase_metrics or {}).get("iterations", 0) or 0,
+    )
 
     return {
         "algorithm": "labelpropagation",
@@ -254,6 +355,8 @@ def build_benchmark_summary(
             "granularity": granularity,
             "max_iter": iterations,
             "memory_mb": memory_mb,
+            "backend": backend,
+            "chunk_size": chunk_size,
         },
         "standalone": {
             "execution_time_ms": standalone_exec_ms,
@@ -265,6 +368,8 @@ def build_benchmark_summary(
             "processing_time_ms": burst_algo_ms,
             "total_time_ms": burst_warm_total_ms,
             "host_total_time_ms": burst_host_total_ms,
+            "phase_metrics": phase_metrics,
+            "logical_traffic_bytes": traffic,
         },
         "speedup": {
             "algorithmic": algo_speedup,
@@ -299,6 +404,8 @@ if __name__ == "__main__":
     parser.add_argument("--ow-port", type=int, default=31001, help="OpenWhisk port")
     parser.add_argument("--skip-standalone", action="store_true", help="Skip standalone benchmark")
     parser.add_argument("--skip-burst", action="store_true", help="Skip burst benchmark")
+    parser.add_argument("--backend", default="redis-list", help="Burst communication backend")
+    parser.add_argument("--chunk-size", type=int, default=1024, help="Burst middleware chunk size in KB")
     parser.add_argument("--validate", action="store_true", help="Validate burst results against standalone")
     parser.add_argument("--s3-endpoint", default=DEFAULT_WORKER_S3_ENDPOINT, help="S3 endpoint for workers inside cluster")
     parser.add_argument("--validation-endpoint", default=DEFAULT_HOST_S3_ENDPOINT, help="S3 endpoint for local validation script")
@@ -308,6 +415,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     graph_file = f"large_{args.nodes}.txt"
+    ensure_input_data(
+        num_nodes=args.nodes,
+        partitions=args.partitions,
+        bucket=args.bucket,
+        endpoint=args.validation_endpoint,
+        key_prefix=args.key_prefix,
+        graph_file=graph_file,
+    )
     
     # Benchmark standalone
     standalone_output = None
@@ -325,12 +440,16 @@ if __name__ == "__main__":
     burst_host_time = None
     burst_warm_time = None
     algo_time = None
+    phase_metrics = None
     validation_performed = False
     validation_passed = None
     validation_skipped_reason = None
     if not args.skip_burst:
+        burst_key_prefix = f"{args.key_prefix}/large-{args.nodes}"
+        clean_burst_cluster()
+        delete_burst_output(args.bucket, burst_key_prefix, args.validation_endpoint)
         print(f"Running burst version...")
-        burst_host_time, burst_warm_time, algo_time = benchmark_burst(
+        burst_host_time, burst_warm_time, algo_time, phase_metrics = benchmark_burst(
             args.nodes, 
             args.partitions, 
             args.iter, 
@@ -341,6 +460,8 @@ if __name__ == "__main__":
             args.s3_endpoint,
             args.bucket,
             args.key_prefix,
+            args.backend,
+            args.chunk_size,
         )
         if burst_host_time is not None:
             print(f"Burst Time (Host Total / Cold): {burst_host_time} ms")
@@ -372,22 +493,29 @@ if __name__ == "__main__":
     
     # Validation
     if args.validate:
-        print("\n=== Running Exact Validation ===")
-        validation_performed = True
         key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-        validation_passed = run_validation(
-            standalone_output,
-            graph_file,
-            args.nodes,
-            args.iter,
-            args.bucket,
-            key_prefix,
-            args.validation_endpoint,
-        )
-        if not validation_passed:
-            print("\n✗ VALIDATION FAILED - Results do not match!")
+        if burst_host_time is None:
+            validation_skipped_reason = "burst execution failed before validation"
+            validation_passed = False
+            print("\n=== Skipping Exact Validation ===")
+            print("Burst execution failed before validation; stale S3 output was deleted.")
             sys.exit(1)
-        print("\n✓ VALIDATION PASSED - Results match!")
+        else:
+            print("\n=== Running Exact Validation ===")
+            validation_performed = True
+            validation_passed = run_validation(
+                standalone_output,
+                graph_file,
+                args.nodes,
+                args.iter,
+                args.bucket,
+                key_prefix,
+                args.validation_endpoint,
+            )
+            if not validation_passed:
+                print("\n✗ VALIDATION FAILED - Results do not match!")
+                sys.exit(1)
+            print("\n✓ VALIDATION PASSED - Results match!")
     else:
         validation_skipped_reason = "validation not requested"
 
@@ -405,5 +533,8 @@ if __name__ == "__main__":
         validation_performed=validation_performed,
         validation_passed=validation_passed,
         validation_skipped_reason=validation_skipped_reason,
+        phase_metrics=phase_metrics,
+        backend=args.backend,
+        chunk_size=args.chunk_size,
     )
     print(f"{BENCHMARK_JSON_PREFIX}{json.dumps(summary, sort_keys=True)}")

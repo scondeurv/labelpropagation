@@ -17,15 +17,14 @@ services:
       - "8080:8080"
     volumes:
       - .:/opt/tfm-spark
-    cpus: 0.5
-    mem_limit: 1g
+    cpus: ${SPARK_MASTER_CPUS:-1.0}
+    mem_limit: ${SPARK_MASTER_MEMORY:-1g}
     networks:
       - spark-net
 
-  spark-worker-1:
+  spark-worker:
     image: ${SPARK_IMAGE:-spark:3.5.7-scala2.12-java17-ubuntu}
-    container_name: spark-worker-1
-    hostname: spark-worker-1
+    hostname: spark-worker
     depends_on:
       - spark-master
     command:
@@ -33,76 +32,13 @@ services:
       - org.apache.spark.deploy.worker.Worker
       - spark://spark-master:7077
       - --cores
-      - "1"
+      - "${SPARK_WORKER_CORES:-1}"
       - --memory
-      - "4g"
+      - "${SPARK_WORKER_MEMORY:-4g}"
     volumes:
       - .:/opt/tfm-spark
-    cpus: 1.0
-    mem_limit: 4g
-    networks:
-      - spark-net
-
-  spark-worker-2:
-    image: ${SPARK_IMAGE:-spark:3.5.7-scala2.12-java17-ubuntu}
-    container_name: spark-worker-2
-    hostname: spark-worker-2
-    depends_on:
-      - spark-master
-    command:
-      - /opt/spark/bin/spark-class
-      - org.apache.spark.deploy.worker.Worker
-      - spark://spark-master:7077
-      - --cores
-      - "1"
-      - --memory
-      - "4g"
-    volumes:
-      - .:/opt/tfm-spark
-    cpus: 1.0
-    mem_limit: 4g
-    networks:
-      - spark-net
-
-  spark-worker-3:
-    image: ${SPARK_IMAGE:-spark:3.5.7-scala2.12-java17-ubuntu}
-    container_name: spark-worker-3
-    hostname: spark-worker-3
-    depends_on:
-      - spark-master
-    command:
-      - /opt/spark/bin/spark-class
-      - org.apache.spark.deploy.worker.Worker
-      - spark://spark-master:7077
-      - --cores
-      - "1"
-      - --memory
-      - "4g"
-    volumes:
-      - .:/opt/tfm-spark
-    cpus: 1.0
-    mem_limit: 4g
-    networks:
-      - spark-net
-
-  spark-worker-4:
-    image: ${SPARK_IMAGE:-spark:3.5.7-scala2.12-java17-ubuntu}
-    container_name: spark-worker-4
-    hostname: spark-worker-4
-    depends_on:
-      - spark-master
-    command:
-      - /opt/spark/bin/spark-class
-      - org.apache.spark.deploy.worker.Worker
-      - spark://spark-master:7077
-      - --cores
-      - "1"
-      - --memory
-      - "4g"
-    volumes:
-      - .:/opt/tfm-spark
-    cpus: 1.0
-    mem_limit: 4g
+    cpus: ${SPARK_WORKER_CPUS_LIMIT:-1.0}
+    mem_limit: ${SPARK_WORKER_MEMORY_LIMIT:-4g}
     networks:
       - spark-net
 

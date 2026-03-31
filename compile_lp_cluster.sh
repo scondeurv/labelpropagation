@@ -43,15 +43,14 @@ docker run --rm --entrypoint="" \
         # 1. Prepare isolated source folders (avoiding mount point busy errors)
         cp -r /tmp/input_actions /tmp/actions_src
         cp -r /tmp/input_middleware /tmp/middleware_src
-        
-        # 2. Replace the container's internal middleware with our local version
-        rm -rf /usr/src/burst-communication-middleware
-        mv /tmp/middleware_src /usr/src/burst-communication-middleware
-        
+
+        # 2. Keep the image's internal middleware, mirroring the stable SSSP path.
+        # This avoids baking LP against a local middleware tree that may diverge
+        # from what the runtime image expects at execution time.
+
         # 3. Compile using the image's internal script
-        # This script automatically uses the golden Cargo.lock and handles the proxy wrapper
         python3 /usr/bin/compile.py main /tmp/actions_src /tmp
-        
+
         # 4. Copy the resulting binary back to the mount
         if [ ! -f /tmp/exec ]; then
             echo '❌ compile.py finished without producing /tmp/exec'

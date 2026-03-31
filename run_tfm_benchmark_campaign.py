@@ -15,11 +15,10 @@ DEFAULT_VALIDATION_PYTHON = Path("/home/sergio/src/bfs/.venv/bin/python")
 DEFAULT_GRAPH_STEPS = (
     "bfs,spark-bfs,"
     "sssp,spark-sssp,"
-    "labelpropagation,spark-labelpropagation,"
-    "unionfind,spark-unionfind,"
+    "wcc,spark-wcc,"
     "reports"
 )
-DEFAULT_REPORT_SLUGS = "bfs,sssp,labelpropagation,unionfind"
+DEFAULT_REPORT_SLUGS = "bfs,sssp,wcc"
 
 
 @dataclass(frozen=True)
@@ -71,12 +70,6 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
             command=[str(repo_python("sssp", validation_python)), "validate_crossover_sssp.py"],
             result_file=ROOT / "sssp/crossover_sssp_results.json",
         ),
-        "labelpropagation": CampaignStep(
-            name="labelpropagation",
-            workdir=ROOT / "labelpropagation",
-            command=[str(repo_python("labelpropagation", validation_python)), "validate_crossover.py"],
-            result_file=ROOT / "labelpropagation/crossover_validation_results.json",
-        ),
         "louvain": CampaignStep(
             name="louvain",
             workdir=ROOT / "louvain",
@@ -95,11 +88,11 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
             command=[str(repo_python("collaborativefiltering", validation_python)), "validate_crossover_cf.py"],
             result_file=ROOT / "collaborativefiltering/crossover_cf_results.json",
         ),
-        "unionfind": CampaignStep(
-            name="unionfind",
+        "wcc": CampaignStep(
+            name="wcc",
             workdir=ROOT / "unionfind",
             command=[str(repo_python("unionfind", validation_python)), "validate_crossover.py"],
-            result_file=ROOT / "unionfind/uf_crossover_validation_results.json",
+            result_file=ROOT / "unionfind/wcc_crossover_validation_results.json",
         ),
         "spark-bfs": CampaignStep(
             name="spark-bfs",
@@ -123,27 +116,16 @@ def build_steps(validation_python: Path) -> dict[str, CampaignStep]:
             ],
             result_file=ROOT / "labelpropagation/spark_baseline/results/sssp.json",
         ),
-        "spark-labelpropagation": CampaignStep(
-            name="spark-labelpropagation",
+        "spark-wcc": CampaignStep(
+            name="spark-wcc",
             workdir=ROOT / "labelpropagation",
             command=[
                 str(repo_python("labelpropagation", validation_python)),
                 "spark_baseline/run_spark_graph_benchmarks.py",
                 "--algorithms",
-                "labelpropagation",
+                "wcc",
             ],
-            result_file=ROOT / "labelpropagation/spark_baseline/results/labelpropagation.json",
-        ),
-        "spark-unionfind": CampaignStep(
-            name="spark-unionfind",
-            workdir=ROOT / "labelpropagation",
-            command=[
-                str(repo_python("labelpropagation", validation_python)),
-                "spark_baseline/run_spark_graph_benchmarks.py",
-                "--algorithms",
-                "unionfind",
-            ],
-            result_file=ROOT / "labelpropagation/spark_baseline/results/unionfind.json",
+            result_file=ROOT / "labelpropagation/spark_baseline/results/wcc.json",
         ),
         "spark-louvain": CampaignStep(
             name="spark-louvain",
@@ -178,6 +160,14 @@ def run_step(step: CampaignStep, validation_python: Path, force: bool) -> None:
     env = os.environ.copy()
     env["VALIDATION_PYTHON"] = str(validation_python)
     env.setdefault("MPLCONFIGDIR", "/tmp/mpl-benchmark-campaign")
+    if step.name == "wcc":
+        env.update(
+            {
+                "WCC_BENCHMARK_TITLE": "WCC",
+                "WCC_OUTPUT_FILE": "wcc_crossover_validation_results.json",
+                "WCC_INTERMEDIATE_PREFIX": "wcc_crossover",
+            }
+        )
     command = list(step.command)
     if force and step.name.startswith("spark-") and "--force" not in command:
         command.append("--force")
@@ -210,9 +200,9 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_GRAPH_STEPS,
         help=(
             "Comma-separated steps to run. "
-            "Available: bfs,sssp,labelpropagation,louvain,gradientboosting,"
-            "collaborativefiltering,unionfind,spark-bfs,spark-sssp,"
-            "spark-labelpropagation,spark-unionfind,spark-louvain,reports"
+            "Available: bfs,sssp,wcc,louvain,gradientboosting,"
+            "collaborativefiltering,spark-bfs,spark-sssp,"
+            "spark-wcc,spark-louvain,reports."
         ),
     )
     parser.add_argument(
@@ -234,6 +224,11 @@ def main() -> None:
     steps_by_name = build_steps(validation_python)
 
     requested_steps = [token.strip() for token in args.steps.split(",") if token.strip()]
+    deduped_steps: list[str] = []
+    for step in requested_steps:
+        if step not in deduped_steps:
+            deduped_steps.append(step)
+    requested_steps = deduped_steps
     unknown = [step for step in requested_steps if step not in steps_by_name]
     if unknown:
         raise SystemExit(f"Unknown steps: {', '.join(unknown)}")

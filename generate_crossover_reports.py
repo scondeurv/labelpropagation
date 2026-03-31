@@ -22,7 +22,7 @@ RAW_DIR = OUT_ROOT / "raw"
 DOC_DIR = OUT_ROOT / "docs"
 FIG_DIR = OUT_ROOT / "figures"
 MPL_DIR = Path("/tmp/mpl-benchmark-campaign")
-DEFAULT_TFM_GRAPH_SLUGS = ("bfs", "sssp", "labelpropagation", "unionfind")
+DEFAULT_TFM_GRAPH_SLUGS = ("bfs", "sssp", "wcc")
 
 
 @dataclass(frozen=True)
@@ -128,14 +128,15 @@ def load_preferred_payload(spec: ReportSpec) -> tuple[dict[str, Any], Path]:
 
 
 def load_optional_spark_payload(spec: ReportSpec) -> tuple[dict[str, Any] | None, Path | None]:
-    if not spec.spark_result_file or not spec.spark_result_file.exists():
-        return None, None
-    payload = load_json(spec.spark_result_file)
-    if payload.get("supported") is False:
-        return payload, spec.spark_result_file
-    results = payload.get("results")
-    if isinstance(results, list) and results:
-        return payload, spec.spark_result_file
+    for path in (spec.spark_result_file,):
+        if not path or not path.exists():
+            continue
+        payload = load_json(path)
+        if payload.get("supported") is False:
+            return payload, path
+        results = payload.get("results")
+        if isinstance(results, list) and results:
+            return payload, path
     return None, None
 
 
@@ -824,9 +825,9 @@ def build_specs() -> list[ReportSpec]:
             crossover_key="crossover_estimate_users",
         ),
         ReportSpec(
-            slug="unionfind",
-            title="Union-Find",
-            result_file=ROOT / "unionfind/uf_crossover_validation_results.json",
+            slug="wcc",
+            title="Weakly Connected Components",
+            result_file=ROOT / "unionfind/wcc_crossover_validation_results.json",
             x_key="nodes",
             x_label="Nodos",
             standalone_key="standalone_exec_ms",
@@ -835,13 +836,13 @@ def build_specs() -> list[ReportSpec]:
             speedup_key="speedup_span",
             speedup_total_key="speedup_total",
             dataset_name="grafo sintético por componentes disjuntas",
-            theory="Union-Find mantiene componentes conexas mediante operaciones de unión y búsqueda de representante, normalmente optimizadas con union by rank y path compression.",
-            standalone_desc="binario Rust local que procesa el grafo completo y devuelve la partición final.",
-            burst_desc="acción distribuida que ejecuta uniones locales por partición y luego coordina la fusión global entre workers.",
+            theory="Weakly Connected Components identifica las componentes conexas de un grafo no dirigido o, en el caso dirigido, las componentes del grafo subyacente ignorando orientación.",
+            standalone_desc="implementación local basada en Union-Find que procesa el grafo completo y devuelve la partición final.",
+            burst_desc="acción distribuida que resuelve conectividad por particiones y luego coordina la fusión global entre workers.",
             dataset_note="Los grafos sintéticos se generan una vez por tamaño con el mismo número de componentes y aristas por nodo para ambas implementaciones.",
             validation_note="La validacion fuerte usa hash canonico de la particion ademas del numero de componentes, de forma que el chequeo siga siendo ejecutable con los recursos disponibles.",
             crossover_key="crossover_estimate",
-            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/unionfind.json",
+            spark_result_file=ROOT / "labelpropagation/spark_baseline/results/wcc.json",
         ),
     ]
 
@@ -853,7 +854,7 @@ def parse_args() -> argparse.Namespace:
         default=",".join(DEFAULT_TFM_GRAPH_SLUGS),
         help=(
             "Comma-separated report slugs to generate. "
-            "Default: bfs,sssp,labelpropagation,unionfind"
+            "Default: bfs,sssp,wcc"
         ),
     )
     return parser.parse_args()
@@ -864,7 +865,14 @@ def select_specs(slugs: list[str]) -> list[ReportSpec]:
     unknown = [slug for slug in slugs if slug not in specs_by_slug]
     if unknown:
         raise SystemExit(f"Unknown report slugs: {', '.join(unknown)}")
-    return [specs_by_slug[slug] for slug in slugs]
+    ordered: list[ReportSpec] = []
+    seen: set[str] = set()
+    for slug in slugs:
+        if slug in seen:
+            continue
+        seen.add(slug)
+        ordered.append(specs_by_slug[slug])
+    return ordered
 
 
 def generate_all(slugs: list[str]) -> None:

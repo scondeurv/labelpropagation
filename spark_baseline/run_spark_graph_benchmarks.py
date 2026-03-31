@@ -9,7 +9,7 @@ import shutil
 import statistics
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,8 +21,6 @@ DATA_DIR = HERE / "data"
 RESULTS_DIR = HERE / "results"
 RESULT_PREFIX = "SPARK_BENCHMARK_RESULT_JSON:"
 UNVISITED = 2**32 - 1
-
-
 @dataclass(frozen=True)
 class SparkAlgorithm:
     slug: str
@@ -37,6 +35,44 @@ class SparkAlgorithm:
     configuration: dict[str, Any]
     supported: bool = True
     unsupported_reason: str | None = None
+
+
+def connected_components_algorithm(slug: str) -> SparkAlgorithm:
+    return SparkAlgorithm(
+        slug=slug,
+        x_key="nodes",
+        points=[100_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000],
+        generator_repo="unionfind",
+        generator_script="setup_large_uf_data.py",
+        dataset_name_fn=lambda size: f"wcc_graph_{size}.tsv",
+        generator_args_fn=lambda size, dataset: [
+            "--nodes", str(size),
+            "--edges-per-node", "5",
+            "--components", "10",
+            "--partitions", "4",
+            "--output", str(dataset),
+            "--key", f"wcc-graphs/wcc-{size}",
+            "--no-s3",
+        ],
+        submit_script="submit-wcc.sh",
+        submit_args_fn=lambda container_input, output_path, _size: [
+            container_input,
+            output_path,
+            "4",
+        ],
+        configuration={
+            "partitions": 4,
+            "edges_per_node": 5,
+            "components": 10,
+            "spark_env": {
+                "SPARK_TOTAL_EXECUTOR_CORES": "4",
+                "SPARK_EXECUTOR_CORES": "1",
+                "SPARK_EXECUTOR_MEMORY": "4g",
+                "SPARK_DEFAULT_PARALLELISM": "4",
+                "SPARK_SHUFFLE_PARTITIONS": "4",
+            },
+        },
+    )
 
 
 def checkpoint_path(algorithm: SparkAlgorithm) -> Path:
@@ -165,14 +201,14 @@ def run_sssp_standalone(graph_file: Path, num_nodes: int, source_node: int) -> d
     return json.loads(completed.stdout.strip())
 
 
-def run_uf_standalone(graph_file: Path, num_nodes: int) -> dict[str, Any]:
+def run_wcc_standalone(graph_file: Path, num_nodes: int) -> dict[str, Any]:
     candidates = [
         ROOT / "unionfind/ufst/target/release/union-find",
         ROOT / "unionfind/ufst/target/release/ufst",
     ]
     binary_path = next((candidate for candidate in candidates if candidate.exists()), None)
     if binary_path is None:
-        raise RuntimeError(f"standalone Union-Find binary not found in {candidates}")
+        raise RuntimeError(f"standalone WCC binary not found in {candidates}")
     completed = run_command(
         [str(binary_path), str(graph_file), str(num_nodes)],
         cwd=binary_path.parent.parent.parent,
@@ -335,12 +371,12 @@ def validate_sssp_spark_output(
     }
 
 
-def validate_uf_spark_output(
+def validate_wcc_spark_output(
     graph_file: Path,
     num_nodes: int,
     spark_output_dir: Path,
 ) -> dict[str, Any]:
-    standalone_output = run_uf_standalone(graph_file, num_nodes)
+    standalone_output = run_wcc_standalone(graph_file, num_nodes)
     standalone_parent = standalone_output.get("parent")
     if not isinstance(standalone_parent, list):
         raise RuntimeError("standalone Union-Find output does not contain parent")
@@ -466,7 +502,7 @@ def benchmark_point(
         env = os.environ.copy()
         for key, value in algorithm.configuration.get("spark_env", {}).items():
             env[key] = str(value)
-        if algorithm.slug in {"bfs", "sssp", "labelpropagation", "unionfind"} and run_idx == 0:
+        if algorithm.slug in {"bfs", "sssp", "labelpropagation", "wcc"} and run_idx == 0:
             env["SPARK_PERSIST_OUTPUT"] = "true"
         else:
             env["SPARK_PERSIST_OUTPUT"] = "false"
@@ -511,8 +547,8 @@ def benchmark_point(
                     int(algorithm.configuration["source_node"]),
                     host_output_dir,
                 )
-            elif algorithm.slug == "unionfind":
-                validation_summary = validate_uf_spark_output(
+            elif algorithm.slug == "wcc":
+                validation_summary = validate_wcc_spark_output(
                     dataset_path,
                     size,
                     host_output_dir,
@@ -753,40 +789,7 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                 },
             },
         ),
-        "unionfind": SparkAlgorithm(
-            slug="unionfind",
-            x_key="nodes",
-            points=[100_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000],
-            generator_repo="unionfind",
-            generator_script="setup_large_uf_data.py",
-            dataset_name_fn=lambda size: f"uf_graph_{size}.tsv",
-            generator_args_fn=lambda size, dataset: [
-                "--nodes", str(size),
-                "--edges-per-node", "5",
-                "--components", "10",
-                "--partitions", "4",
-                "--output", str(dataset),
-                "--no-s3",
-            ],
-            submit_script="submit-uf.sh",
-            submit_args_fn=lambda container_input, output_path, _size: [
-                container_input,
-                output_path,
-                "4",
-            ],
-            configuration={
-                "partitions": 4,
-                "edges_per_node": 5,
-                "components": 10,
-                "spark_env": {
-                    "SPARK_TOTAL_EXECUTOR_CORES": "4",
-                    "SPARK_EXECUTOR_CORES": "1",
-                    "SPARK_EXECUTOR_MEMORY": "4g",
-                    "SPARK_DEFAULT_PARALLELISM": "4",
-                    "SPARK_SHUFFLE_PARTITIONS": "4",
-                },
-            },
-        ),
+        "wcc": connected_components_algorithm("wcc"),
         "louvain": SparkAlgorithm(
             slug="louvain",
             x_key="nodes",
@@ -808,16 +811,133 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
     }
 
 
+def parse_points_arg(raw: str | None) -> list[int] | None:
+    if not raw:
+        return None
+    return [int(token.strip()) for token in raw.split(",") if token.strip()]
+
+
+def with_resource_overrides(
+    algorithm: SparkAlgorithm,
+    *,
+    partitions: int,
+    executors: int,
+    executor_memory: str,
+    points: list[int] | None,
+) -> SparkAlgorithm:
+    if not algorithm.supported:
+        return algorithm
+
+    config = json.loads(json.dumps(algorithm.configuration))
+    config["partitions"] = partitions
+    spark_env = config.setdefault("spark_env", {})
+    spark_env["SPARK_TOTAL_EXECUTOR_CORES"] = str(executors)
+    spark_env["SPARK_EXECUTOR_CORES"] = "1"
+    spark_env["SPARK_EXECUTOR_MEMORY"] = executor_memory
+    spark_env["SPARK_DEFAULT_PARALLELISM"] = str(partitions)
+    spark_env["SPARK_SHUFFLE_PARTITIONS"] = str(partitions)
+
+    if algorithm.slug == "bfs":
+        return replace(
+            algorithm,
+            points=points or algorithm.points,
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", str(partitions),
+                "--density", "10",
+                "--output", str(dataset),
+                "--no-s3",
+            ],
+            submit_args_fn=lambda container_input, output_path, _size: [
+                container_input,
+                output_path,
+                "0",
+                "500",
+                str(partitions),
+            ],
+            configuration=config,
+        )
+
+    if algorithm.slug == "sssp":
+        return replace(
+            algorithm,
+            points=points or algorithm.points,
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", str(partitions),
+                "--density", "10",
+                "--max-weight", "10.0",
+                "--output", str(dataset),
+                "--no-s3",
+            ],
+            submit_args_fn=lambda container_input, output_path, _size: [
+                container_input,
+                output_path,
+                "0",
+                str(partitions),
+                "500",
+            ],
+            configuration=config,
+        )
+
+    if algorithm.slug == "labelpropagation":
+        return replace(
+            algorithm,
+            points=points or algorithm.points,
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", str(partitions),
+                "--density", "20",
+                "--output", str(dataset),
+                "--no-s3",
+            ],
+            submit_args_fn=lambda container_input, output_path, _size: [
+                container_input,
+                output_path,
+                "10",
+                str(partitions),
+            ],
+            configuration=config,
+        )
+
+    if algorithm.slug == "wcc":
+        return replace(
+            algorithm,
+            points=points or algorithm.points,
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--edges-per-node", "5",
+                "--components", "10",
+                "--partitions", str(partitions),
+                "--output", str(dataset),
+                "--key", f"wcc-graphs/wcc-{size}",
+                "--no-s3",
+            ],
+            submit_args_fn=lambda container_input, output_path, _size: [
+                container_input,
+                output_path,
+                str(partitions),
+            ],
+            configuration=config,
+        )
+
+    return replace(algorithm, points=points or algorithm.points, configuration=config)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Spark baselines for the graph algorithms used in the TFM.")
     parser.add_argument(
         "--algorithms",
-        default="bfs,sssp,labelpropagation,unionfind,louvain",
+        default="bfs,sssp,labelpropagation,wcc,louvain",
         help="Comma-separated Spark baseline steps to run.",
     )
     parser.add_argument("--runs", type=int, default=3, help="Repetitions per point.")
     parser.add_argument("--force", action="store_true", help="Re-run even if the JSON already exists.")
     parser.add_argument("--force-data", action="store_true", help="Re-generate local datasets even if they exist.")
+    parser.add_argument("--partitions", type=int, default=4, help="Dataset partitions and Spark parallelism.")
+    parser.add_argument("--executors", type=int, default=4, help="Spark executors with 1 core each.")
+    parser.add_argument("--executor-memory", default="4g", help="Memory per Spark executor.")
+    parser.add_argument("--points", default="", help="Comma-separated override for graph sizes.")
     return parser.parse_args()
 
 
@@ -825,13 +945,26 @@ def main() -> None:
     args = parse_args()
     ensure_dirs()
     algorithms = build_algorithms()
+    override_points = parse_points_arg(args.points)
     requested = [token.strip() for token in args.algorithms.split(",") if token.strip()]
+    deduped: list[str] = []
+    for name in requested:
+        if name not in deduped:
+            deduped.append(name)
+    requested = deduped
     unknown = [name for name in requested if name not in algorithms]
     if unknown:
         raise SystemExit(f"Unknown Spark algorithms: {', '.join(unknown)}")
 
     for name in requested:
-        run_algorithm(algorithms[name], runs=args.runs, force=args.force, force_data=args.force_data)
+        algorithm = with_resource_overrides(
+            algorithms[name],
+            partitions=args.partitions,
+            executors=args.executors,
+            executor_memory=args.executor_memory,
+            points=override_points,
+        )
+        run_algorithm(algorithm, runs=args.runs, force=args.force, force_data=args.force_data)
 
 
 if __name__ == "__main__":
