@@ -24,6 +24,15 @@ Resultados:
 - `feasibility/`: criba de configuraciones validas
 - `config_sweep/`: barrido de particiones y granularidad a tamano fijo
 - `size_sweep/`: escalado por tamano usando la mejor configuracion por presupuesto
+- `reports/`: figuras, tablas y resumen Markdown generados desde los sweeps finales
+
+Generacion de reportes:
+
+```bash
+MPLCONFIGDIR=/tmp/mpl-resource-sweep \
+  /home/sergio/src/labelpropagation/.venv/bin/python \
+  /home/sergio/src/labelpropagation/generate_resource_sweep_reports.py
+```
 
 Notas:
 

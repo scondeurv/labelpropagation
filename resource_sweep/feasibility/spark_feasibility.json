@@ -1,0 +1,1016 @@
+{
+  "metadata": {
+    "phase": "spark-feasibility",
+    "partial": false
+  },
+  "results": [
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 4,
+      "executors": 4,
+      "executor_memory": "4g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 5.0,
+        "memory_mb": 17408,
+        "details": {
+          "executors": 4,
+          "executor_cores": 1,
+          "executor_memory_mb": 4096,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 33844.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 17751.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 16092.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 33844.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          17751.0
+        ],
+        "spark_exec_runs_ms": [
+          16092.0
+        ],
+        "spark_total_runs_ms": [
+          33844.0
+        ],
+        "spark_load_validated_run_ms": 17751.0,
+        "spark_exec_validated_run_ms": 16092.0,
+        "spark_total_validated_run_ms": 33844.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 4,
+      "executors": 4,
+      "executor_memory": "6g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 5.0,
+        "memory_mb": 25600,
+        "details": {
+          "executors": 4,
+          "executor_cores": 1,
+          "executor_memory_mb": 6144,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 35016.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 15247.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 19769.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 35016.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          15247.0
+        ],
+        "spark_exec_runs_ms": [
+          19769.0
+        ],
+        "spark_total_runs_ms": [
+          35016.0
+        ],
+        "spark_load_validated_run_ms": 15247.0,
+        "spark_exec_validated_run_ms": 19769.0,
+        "spark_total_validated_run_ms": 35016.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 25600,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 33428.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 14391.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 19037.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 33428.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          14391.0
+        ],
+        "spark_exec_runs_ms": [
+          19037.0
+        ],
+        "spark_total_runs_ms": [
+          33428.0
+        ],
+        "spark_load_validated_run_ms": 14391.0,
+        "spark_exec_validated_run_ms": 19037.0,
+        "spark_total_validated_run_ms": 33428.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "4g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 33792,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 4096,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 36109.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 13733.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 22376.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 36109.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          13733.0
+        ],
+        "spark_exec_runs_ms": [
+          22376.0
+        ],
+        "spark_total_runs_ms": [
+          36109.0
+        ],
+        "spark_load_validated_run_ms": 13733.0,
+        "spark_exec_validated_run_ms": 22376.0,
+        "spark_total_validated_run_ms": 36109.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "6g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 6144,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 32704.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 13889.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 18815.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 32704.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          13889.0
+        ],
+        "spark_exec_runs_ms": [
+          18815.0
+        ],
+        "spark_total_runs_ms": [
+          32704.0
+        ],
+        "spark_load_validated_run_ms": 13889.0,
+        "spark_exec_validated_run_ms": 18815.0,
+        "spark_total_validated_run_ms": 32704.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 16,
+      "executors": 16,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 17.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 16,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 37758.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 14405.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 23352.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 37758.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          14405.0
+        ],
+        "spark_exec_runs_ms": [
+          23352.0
+        ],
+        "spark_total_runs_ms": [
+          37758.0
+        ],
+        "spark_load_validated_run_ms": 14405.0,
+        "spark_exec_validated_run_ms": 23352.0,
+        "spark_total_validated_run_ms": 37758.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "partitions": 32,
+      "executors": 16,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 17.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 16,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 46629.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "mismatches": 0,
+        "sample_mismatches": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 16312.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 30316.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 46629.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          16312.0
+        ],
+        "spark_exec_runs_ms": [
+          30316.0
+        ],
+        "spark_total_runs_ms": [
+          46629.0
+        ],
+        "spark_load_validated_run_ms": 16312.0,
+        "spark_exec_validated_run_ms": 30316.0,
+        "spark_total_validated_run_ms": 46629.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "reachable_nodes": 499980,
+        "max_distance": 26.9054,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "mismatches": 0,
+          "sample_mismatches": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 4,
+      "executors": 4,
+      "executor_memory": "4g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 5.0,
+        "memory_mb": 17408,
+        "details": {
+          "executors": 4,
+          "executor_cores": 1,
+          "executor_memory_mb": 4096,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 260150.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 18361.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 241789.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 260150.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          18361.0
+        ],
+        "spark_exec_runs_ms": [
+          241789.0
+        ],
+        "spark_total_runs_ms": [
+          260150.0
+        ],
+        "spark_load_validated_run_ms": 18361.0,
+        "spark_exec_validated_run_ms": 241789.0,
+        "spark_total_validated_run_ms": 260150.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 4,
+      "executors": 4,
+      "executor_memory": "6g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 5.0,
+        "memory_mb": 25600,
+        "details": {
+          "executors": 4,
+          "executor_cores": 1,
+          "executor_memory_mb": 6144,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 109657.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 17770.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 91887.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 109657.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          17770.0
+        ],
+        "spark_exec_runs_ms": [
+          91887.0
+        ],
+        "spark_total_runs_ms": [
+          109657.0
+        ],
+        "spark_load_validated_run_ms": 17770.0,
+        "spark_exec_validated_run_ms": 91887.0,
+        "spark_total_validated_run_ms": 109657.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 25600,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 107033.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 15096.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 91937.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 107033.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          15096.0
+        ],
+        "spark_exec_runs_ms": [
+          91937.0
+        ],
+        "spark_total_runs_ms": [
+          107033.0
+        ],
+        "spark_load_validated_run_ms": 15096.0,
+        "spark_exec_validated_run_ms": 91937.0,
+        "spark_total_validated_run_ms": 107033.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "4g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 33792,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 4096,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 108316.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 15124.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 93191.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 108316.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          15124.0
+        ],
+        "spark_exec_runs_ms": [
+          93191.0
+        ],
+        "spark_total_runs_ms": [
+          108316.0
+        ],
+        "spark_load_validated_run_ms": 15124.0,
+        "spark_exec_validated_run_ms": 93191.0,
+        "spark_total_validated_run_ms": 108316.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 8,
+      "executors": 8,
+      "executor_memory": "6g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 9.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 8,
+          "executor_cores": 1,
+          "executor_memory_mb": 6144,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 124173.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 15006.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 109167.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 124173.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          15006.0
+        ],
+        "spark_exec_runs_ms": [
+          109167.0
+        ],
+        "spark_total_runs_ms": [
+          124173.0
+        ],
+        "spark_load_validated_run_ms": 15006.0,
+        "spark_exec_validated_run_ms": 109167.0,
+        "spark_total_validated_run_ms": 124173.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 16,
+      "executors": 16,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 17.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 16,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 105499.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 15921.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 89577.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 105499.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          15921.0
+        ],
+        "spark_exec_runs_ms": [
+          89577.0
+        ],
+        "spark_total_runs_ms": [
+          105499.0
+        ],
+        "spark_load_validated_run_ms": 15921.0,
+        "spark_exec_validated_run_ms": 89577.0,
+        "spark_total_validated_run_ms": 105499.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    },
+    {
+      "framework": "spark",
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "partitions": 32,
+      "executors": 16,
+      "executor_memory": "3g",
+      "runs": 1,
+      "request": {
+        "framework": "spark",
+        "cpus": 17.0,
+        "memory_mb": 50176,
+        "details": {
+          "executors": 16,
+          "executor_cores": 1,
+          "executor_memory_mb": 3072,
+          "master_cpus": 1.0,
+          "master_memory_mb": 1024
+        },
+        "fits_budget": true
+      },
+      "feasible": true,
+      "status": "passed",
+      "primary_metric_ms": 125894.0,
+      "validation": {
+        "performed": true,
+        "passed": true,
+        "num_nodes": 500000,
+        "accuracy": 100.0,
+        "mismatches": 0,
+        "seed_violations": 0,
+        "sample_mismatches": [],
+        "sample_seed_violations": []
+      },
+      "summary": {
+        "nodes": 500000,
+        "spark_load_ms": 17359.0,
+        "spark_load_std_ms": 0.0,
+        "spark_exec_ms": 108534.0,
+        "spark_exec_std_ms": 0.0,
+        "spark_total_ms": 125894.0,
+        "spark_total_std_ms": 0.0,
+        "spark_load_runs_ms": [
+          17359.0
+        ],
+        "spark_exec_runs_ms": [
+          108534.0
+        ],
+        "spark_total_runs_ms": [
+          125894.0
+        ],
+        "spark_load_validated_run_ms": 17359.0,
+        "spark_exec_validated_run_ms": 108534.0,
+        "spark_total_validated_run_ms": 125894.0,
+        "spark_load_avg_unvalidated_ms": null,
+        "spark_load_std_unvalidated_ms": null,
+        "spark_exec_avg_unvalidated_ms": null,
+        "spark_exec_std_unvalidated_ms": null,
+        "spark_total_avg_unvalidated_ms": null,
+        "spark_total_std_unvalidated_ms": null,
+        "iterations": 10,
+        "converged": false,
+        "labeled_nodes": 500000,
+        "distinct_labels": 4,
+        "validation": {
+          "performed": true,
+          "passed": true,
+          "num_nodes": 500000,
+          "accuracy": 100.0,
+          "mismatches": 0,
+          "seed_violations": 0,
+          "sample_mismatches": [],
+          "sample_seed_violations": []
+        }
+      }
+    }
+  ]
+}

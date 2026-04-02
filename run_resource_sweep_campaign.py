@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -125,17 +126,48 @@ def parse_str_csv(raw: str) -> list[str]:
     return deduped
 
 
+def burst_worker_count(partitions: int, granularity: int) -> int:
+    if granularity <= 0 or partitions % granularity != 0:
+        raise ValueError(f"invalid Burst layout: partitions={partitions}, granularity={granularity}")
+    return partitions // granularity
+
+
+def spark_executor_candidates(partitions: int) -> list[int]:
+    return {
+        4: [4],
+        8: [8],
+        16: [16],
+        32: [16],
+    }[partitions]
+
+
+def burst_layout_supported(algorithm: str, partitions: int, granularity: int) -> bool:
+    workers = burst_worker_count(partitions, granularity)
+    if workers < 2:
+        return False
+    if partitions == 32 and granularity == 16:
+        return False
+    if algorithm == "labelpropagation" and partitions == 32 and granularity == 2:
+        return False
+    return True
+
+
 def normalize_granularities(partitions: int, *, reduced: bool = False) -> list[int]:
     all_values = divisors(partitions)
-    all_values = [value for value in all_values if (partitions // value) >= 2]
+    all_values = [value for value in all_values if burst_worker_count(partitions, value) >= 2]
     if not reduced:
         return all_values
     reduced_candidates = {
         4: [1, 2, 4],
         8: [1, 2, 4, 8],
-        12: [1, 2, 6, 12],
+        16: [1, 2, 4, 8, 16],
+        32: [1, 2, 4, 8, 16, 32],
     }.get(partitions, all_values)
-    return [value for value in reduced_candidates if partitions % value == 0 and (partitions // value) >= 2]
+    return [
+        value
+        for value in reduced_candidates
+        if partitions % value == 0 and burst_worker_count(partitions, value) >= 2
+    ]
 
 
 def ensure_dirs() -> None:
@@ -180,12 +212,14 @@ def burst_feasibility_memory_matrix(partitions: int, profile: str = "full") -> l
         "full": {
             4: [3072, 4096, 6144],
             8: [2048, 3072, 4096],
-            12: [2048, 3072],
+            16: [2048],
+            32: [2048],
         },
         "safe": {
             4: [3072, 4096],
             8: [2048, 3072],
-            12: [2048, 3072],
+            16: [2048],
+            32: [2048],
         },
     }
     return matrices[profile][partitions]
@@ -195,7 +229,7 @@ def spark_feasibility_memory_matrix(executors: int) -> list[str]:
     return {
         4: ["4g", "6g"],
         8: ["3g", "4g", "6g"],
-        12: ["3g", "4g"],
+        16: ["3g"],
     }[executors]
 
 
@@ -207,6 +241,8 @@ def build_burst_feasibility_rows(args: argparse.Namespace, budget: HostBudget) -
                 partitions, profile=args.burst_feasibility_profile
             ):
                 for granularity in normalize_granularities(partitions):
+                    if not burst_layout_supported(algorithm, partitions, granularity):
+                        continue
                     rows.append(
                         {
                             "framework": "burst",
@@ -221,7 +257,7 @@ def build_burst_feasibility_rows(args: argparse.Namespace, budget: HostBudget) -
     return feasible_request_rows(
         rows,
         request_builder=lambda row: burst_cluster_request(
-            workers=int(row["partitions"]),
+            workers=burst_worker_count(int(row["partitions"]), int(row["granularity"])),
             memory_per_worker_mb=int(row["memory_mb"]),
             system_reserved_cpus=args.burst_system_reserved_cpus,
             system_reserved_mem_mb=args.burst_system_reserved_mem_mb,
@@ -233,19 +269,20 @@ def build_burst_feasibility_rows(args: argparse.Namespace, budget: HostBudget) -
 def build_spark_feasibility_rows(args: argparse.Namespace, budget: HostBudget) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for algorithm in ("sssp", "labelpropagation"):
-        for executors in parse_int_csv(args.app_partitions):
-            for executor_memory in spark_feasibility_memory_matrix(executors):
-                rows.append(
-                    {
-                        "framework": "spark",
-                        "algorithm": algorithm,
-                        "nodes": args.feasibility_nodes,
-                        "partitions": executors,
-                        "executors": executors,
-                        "executor_memory": executor_memory,
-                        "runs": 1,
-                    }
-                )
+        for partitions in parse_int_csv(args.app_partitions):
+            for executors in spark_executor_candidates(partitions):
+                for executor_memory in spark_feasibility_memory_matrix(executors):
+                    rows.append(
+                        {
+                            "framework": "spark",
+                            "algorithm": algorithm,
+                            "nodes": args.feasibility_nodes,
+                            "partitions": partitions,
+                            "executors": executors,
+                            "executor_memory": executor_memory,
+                            "runs": 1,
+                        }
+                    )
     return feasible_request_rows(
         rows,
         request_builder=lambda row: spark_cluster_request(
@@ -264,6 +301,8 @@ def build_config_sweep_rows(args: argparse.Namespace) -> list[dict[str, Any]]:
         reduced = algorithm in {"bfs", "wcc"}
         for partitions in parse_int_csv(args.app_partitions):
             for granularity in normalize_granularities(partitions, reduced=reduced):
+                if not burst_layout_supported(algorithm, partitions, granularity):
+                    continue
                 rows.append(
                     {
                         "framework": "burst",
@@ -275,18 +314,19 @@ def build_config_sweep_rows(args: argparse.Namespace) -> list[dict[str, Any]]:
                         "memory_selection": "best_stable_from_feasibility",
                     }
                 )
-        for executors in parse_int_csv(args.app_partitions):
-            rows.append(
-                {
-                    "framework": "spark",
-                    "algorithm": algorithm,
-                    "nodes": args.config_nodes,
-                    "partitions": executors,
-                    "executors": executors,
-                    "runs": args.config_runs,
-                    "memory_selection": "best_stable_from_feasibility",
-                }
-            )
+        for partitions in parse_int_csv(args.app_partitions):
+            for executors in spark_executor_candidates(partitions):
+                rows.append(
+                    {
+                        "framework": "spark",
+                        "algorithm": algorithm,
+                        "nodes": args.config_nodes,
+                        "partitions": partitions,
+                        "executors": executors,
+                        "runs": args.config_runs,
+                        "memory_selection": "best_stable_from_feasibility",
+                    }
+                )
     return rows
 
 
@@ -339,9 +379,39 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         },
         "constraints": {
             "single_worker_burst": "Se excluyen configuraciones con workers=1 (granularity=partitions) porque no representan paralelismo distribuido real.",
+            "power_of_two_burst_sizes": "Las comparativas principales usan burst sizes potencia de dos porque el reduce actual del middleware exige esa topologia.",
+            "burst_runtime_filters": "Se excluyen configuraciones ya diagnosticadas como no defendibles: P=32,g=16 para Burst y LP con P=32,g=2.",
             "phase_separation": "Burst/OpenWhisk y Spark se ejecutan en fases separadas.",
         },
     }
+
+
+def annotate_burst_rows(args: argparse.Namespace, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    budget = build_budget(args)
+    return feasible_request_rows(
+        rows,
+        request_builder=lambda row: burst_cluster_request(
+            workers=burst_worker_count(int(row["partitions"]), int(row["granularity"])),
+            memory_per_worker_mb=int(row["memory_mb"]),
+            system_reserved_cpus=args.burst_system_reserved_cpus,
+            system_reserved_mem_mb=args.burst_system_reserved_mem_mb,
+        ),
+        budget=budget,
+    )
+
+
+def annotate_spark_rows(args: argparse.Namespace, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    budget = build_budget(args)
+    return feasible_request_rows(
+        rows,
+        request_builder=lambda row: spark_cluster_request(
+            executors=int(row["executors"]),
+            executor_memory=str(row["executor_memory"]),
+            master_cpus=args.spark_master_cpus,
+            master_memory=args.spark_master_memory,
+        ),
+        budget=budget,
+    )
 
 
 def save_plan(args: argparse.Namespace) -> Path:
@@ -454,7 +524,14 @@ def start_burst_cluster(args: argparse.Namespace, rows: list[dict[str, Any]]) ->
         "OW_SYSTEM_RESERVED_MEM_MB": str(args.burst_system_reserved_mem_mb),
         "OW_CLUSTER_CPUS": str(int(profile["cpus"])),
         "OW_CLUSTER_MEMORY_MB": str(int(profile["memory_mb"])),
-        "OW_WORKER_COUNT": str(max(int(row.get("partitions", row.get("workers", 1))) for row in rows)),
+        "OW_WORKER_COUNT": str(
+            max(
+                burst_worker_count(int(row["partitions"]), int(row["granularity"]))
+                if "partitions" in row and "granularity" in row
+                else int(row.get("workers", row.get("partitions", 1)))
+                for row in rows
+            )
+        ),
         "OW_MEMORY_PER_WORKER_MB": str(
             max(int(row.get("memory_mb", args.probe_memory_mb)) for row in rows)
         ),
@@ -466,6 +543,20 @@ def start_burst_cluster(args: argparse.Namespace, rows: list[dict[str, Any]]) ->
         ["bash", str(ROOT / "openwhisk-deploy-kube-burst" / "start-exposed.sh")],
         cwd=ROOT / "openwhisk-deploy-kube-burst",
         env=env,
+    )
+    wait_for_burst_cluster(profile)
+
+
+def wait_for_burst_cluster(profile: dict[str, Any], timeout_seconds: int = 180) -> None:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if burst_cluster_is_ready(profile):
+            log("Burst cluster is ready")
+            return
+        time.sleep(3)
+    raise RuntimeError(
+        f"Burst cluster did not become ready within {timeout_seconds}s "
+        f"for {int(profile['cpus'])} CPU / {int(profile['memory_mb'])}MB"
     )
 
 
@@ -712,6 +803,62 @@ def load_phase_rows(path: Path) -> list[dict[str, Any]]:
     return payload.get("results", [])
 
 
+ROW_KEY_FIELDS = (
+    "kind",
+    "framework",
+    "algorithm",
+    "nodes",
+    "partitions",
+    "granularity",
+    "memory_mb",
+    "executors",
+    "executor_memory",
+    "runs",
+    "workers",
+)
+
+
+def phase_row_key(row: dict[str, Any]) -> tuple[tuple[str, Any], ...]:
+    return tuple((field, row.get(field)) for field in ROW_KEY_FIELDS if field in row)
+
+
+def load_existing_phase_results(
+    path: Path,
+    *,
+    resume_existing: bool,
+) -> tuple[list[dict[str, Any]], dict[tuple[tuple[str, Any], ...], int]]:
+    if not resume_existing or not path.exists():
+        return [], {}
+    rows = load_phase_rows(path)
+    index = {phase_row_key(row): position for position, row in enumerate(rows)}
+    return rows, index
+
+
+def should_retry_existing_row(row: dict[str, Any], args: argparse.Namespace) -> bool:
+    status = str(row.get("status", "")).lower()
+    if status == "passed":
+        return False
+    if status == "failed":
+        return args.retry_failed
+    if status == "skipped":
+        return args.retry_skipped
+    return True
+
+
+def upsert_phase_result(
+    results: list[dict[str, Any]],
+    index: dict[tuple[tuple[str, Any], ...], int],
+    row: dict[str, Any],
+) -> None:
+    key = phase_row_key(row)
+    position = index.get(key)
+    if position is None:
+        index[key] = len(results)
+        results.append(row)
+        return
+    results[position] = row
+
+
 def select_best_memory_map(rows: list[dict[str, Any]], *, framework: str) -> dict[str, dict[int, Any]]:
     selected: dict[str, dict[int, Any]] = {}
     for row in rows:
@@ -748,7 +895,7 @@ def select_best_config_rows(rows: list[dict[str, Any]], *, framework: str) -> di
 
 def materialize_burst_config_rows(args: argparse.Namespace, memory_map: dict[str, dict[int, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    fallback_map = {4: 4096, 8: 3072, 12: 3072}
+    fallback_map = {4: 4096, 8: 3072, 16: 2048, 32: 2048}
     for template in build_config_sweep_rows(args):
         if template["framework"] != "burst":
             continue
@@ -763,7 +910,7 @@ def materialize_burst_config_rows(args: argparse.Namespace, memory_map: dict[str
 
 def materialize_spark_config_rows(args: argparse.Namespace, memory_map: dict[str, dict[int, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    fallback_map = {4: "4g", 8: "4g", 12: "4g"}
+    fallback_map = {4: "4g", 8: "4g", 16: "3g", 32: "3g"}
     for template in build_config_sweep_rows(args):
         if template["framework"] != "spark":
             continue
@@ -784,21 +931,30 @@ def apply_limit(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
 
 def run_burst_phase(args: argparse.Namespace, phase_name: str, rows: list[dict[str, Any]], output_path: Path) -> Path:
     selected = apply_limit(rows, args.max_configs)
+    results, result_index = load_existing_phase_results(output_path, resume_existing=args.resume_existing)
     if args.prepare_burst_cluster:
         start_burst_cluster(args, selected)
-    results: list[dict[str, Any]] = []
     for row in selected:
+        row_key = phase_row_key(row)
+        existing = results[result_index[row_key]] if row_key in result_index else None
+        if existing is not None and not should_retry_existing_row(existing, args):
+            log(
+                f"Skipping existing {phase_name} burst {row['algorithm']} "
+                f"n={row.get('nodes', '-')} p={row.get('partitions', '-')} "
+                f"g={row.get('granularity', '-')} [{existing.get('status', 'unknown')}]"
+            )
+            continue
         if not row.get("feasible", True):
-            results.append({**row, "status": "skipped", "skip_reason": "exceeds host budget"})
+            upsert_phase_result(results, result_index, {**row, "status": "skipped", "skip_reason": "exceeds host budget"})
             continue
         log(
             f"{phase_name} burst {row['algorithm']} n={row['nodes']} p={row['partitions']} g={row['granularity']}"
         )
         try:
             outcome = run_burst_benchmark(row, args)
-            results.append({**row, **outcome})
+            upsert_phase_result(results, result_index, {**row, **outcome})
         except Exception as exc:
-            results.append({**row, "status": "failed", "error": str(exc)})
+            upsert_phase_result(results, result_index, {**row, "status": "failed", "error": str(exc)})
         persist_phase_rows(output_path, {"phase": phase_name, "partial": True}, results)
     persist_phase_rows(output_path, {"phase": phase_name, "partial": False}, results)
     return output_path
@@ -806,24 +962,33 @@ def run_burst_phase(args: argparse.Namespace, phase_name: str, rows: list[dict[s
 
 def run_spark_phase(args: argparse.Namespace, phase_name: str, rows: list[dict[str, Any]], output_path: Path) -> Path:
     selected = apply_limit(rows, args.max_configs)
+    results, result_index = load_existing_phase_results(output_path, resume_existing=args.resume_existing)
     started = False
     try:
         if args.prepare_spark_cluster:
             start_spark_cluster(args, selected)
             started = True
-        results: list[dict[str, Any]] = []
         for row in selected:
+            row_key = phase_row_key(row)
+            existing = results[result_index[row_key]] if row_key in result_index else None
+            if existing is not None and not should_retry_existing_row(existing, args):
+                log(
+                    f"Skipping existing {phase_name} spark {row['algorithm']} "
+                    f"n={row.get('nodes', '-')} p={row.get('partitions', '-')} "
+                    f"e={row.get('executors', '-')} [{existing.get('status', 'unknown')}]"
+                )
+                continue
             if not row.get("feasible", True):
-                results.append({**row, "status": "skipped", "skip_reason": "exceeds host budget"})
+                upsert_phase_result(results, result_index, {**row, "status": "skipped", "skip_reason": "exceeds host budget"})
                 continue
             log(
                 f"{phase_name} spark {row['algorithm']} n={row['nodes']} p={row['partitions']} e={row['executors']}"
             )
             try:
                 outcome = run_spark_benchmark(row, args)
-                results.append({**row, **outcome})
+                upsert_phase_result(results, result_index, {**row, **outcome})
             except Exception as exc:
-                results.append({**row, "status": "failed", "error": str(exc)})
+                upsert_phase_result(results, result_index, {**row, "status": "failed", "error": str(exc)})
             persist_phase_rows(output_path, {"phase": phase_name, "partial": True}, results)
         persist_phase_rows(output_path, {"phase": phase_name, "partial": False}, results)
         return output_path
@@ -847,8 +1012,8 @@ def run_spark_feasibility(args: argparse.Namespace) -> Path:
 def run_config_sweep(args: argparse.Namespace) -> list[Path]:
     burst_memory = select_best_memory_map(load_phase_rows(FEAS_DIR / "burst_feasibility.json"), framework="burst")
     spark_memory = select_best_memory_map(load_phase_rows(FEAS_DIR / "spark_feasibility.json"), framework="spark")
-    burst_rows = materialize_burst_config_rows(args, burst_memory)
-    spark_rows = materialize_spark_config_rows(args, spark_memory)
+    burst_rows = annotate_burst_rows(args, materialize_burst_config_rows(args, burst_memory))
+    spark_rows = annotate_spark_rows(args, materialize_spark_config_rows(args, spark_memory))
     outputs: list[Path] = []
     if args.framework_scope in {"both", "burst"}:
         outputs.append(
@@ -896,9 +1061,23 @@ def run_size_sweep(args: argparse.Namespace) -> list[Path]:
             )
     outputs: list[Path] = []
     if burst_rows and args.framework_scope in {"both", "burst"}:
-        outputs.append(run_burst_phase(args, "size-sweep-burst", burst_rows, SIZE_DIR / "burst_size_sweep.json"))
+        outputs.append(
+            run_burst_phase(
+                args,
+                "size-sweep-burst",
+                annotate_burst_rows(args, burst_rows),
+                SIZE_DIR / "burst_size_sweep.json",
+            )
+        )
     if spark_rows and args.framework_scope in {"both", "spark"}:
-        outputs.append(run_spark_phase(args, "size-sweep-spark", spark_rows, SIZE_DIR / "spark_size_sweep.json"))
+        outputs.append(
+            run_spark_phase(
+                args,
+                "size-sweep-spark",
+                annotate_spark_rows(args, spark_rows),
+                SIZE_DIR / "spark_size_sweep.json",
+            )
+        )
     return outputs
 
 
@@ -911,8 +1090,8 @@ def parse_args() -> argparse.Namespace:
         help="Sweep phase to execute.",
     )
     parser.add_argument("--algorithms", default="bfs,sssp,labelpropagation,wcc")
-    parser.add_argument("--probe-workers", default="4,8,12,16")
-    parser.add_argument("--app-partitions", default="4,8,12")
+    parser.add_argument("--probe-workers", default="4,8,16")
+    parser.add_argument("--app-partitions", default="4,8,16,32")
     parser.add_argument("--size-nodes", default="100000,500000,1000000,2000000")
     parser.add_argument("--feasibility-nodes", type=int, default=500000)
     parser.add_argument("--config-nodes", type=int, default=500000)
@@ -941,6 +1120,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sssp-max-iterations", type=int, default=500)
     parser.add_argument("--lp-iterations", type=int, default=10)
     parser.add_argument("--command-timeout-sec", type=int, default=600)
+    parser.add_argument(
+        "--resume-existing",
+        dest="resume_existing",
+        action="store_true",
+        default=True,
+        help="Reuse existing phase JSON outputs and skip rows that are already complete.",
+    )
+    parser.add_argument(
+        "--no-resume-existing",
+        dest="resume_existing",
+        action="store_false",
+        help="Ignore any existing phase JSON output and rebuild the phase from scratch.",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="When resuming, re-run rows already recorded as failed.",
+    )
+    parser.add_argument(
+        "--retry-skipped",
+        action="store_true",
+        help="When resuming, re-run rows already recorded as skipped.",
+    )
     parser.add_argument(
         "--burst-feasibility-profile",
         choices=["full", "safe"],

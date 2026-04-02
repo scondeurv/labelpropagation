@@ -1,0 +1,18 @@
+[
+  {
+    "nodes": 500000,
+    "partitions": 32,
+    "s3_prefix": "wcc-graphs/wcc-500000",
+    "standalone": {
+      "num_components": 10,
+      "time_s": 0.176,
+      "execution_time_ms": 24,
+      "total_time_ms": 176,
+      "component_hash": "8340f6cd8dc1fd35"
+    },
+    "burst": {
+      "error": "'NoneType' object is not iterable"
+    },
+    "validation": "FAILED"
+  }
+]

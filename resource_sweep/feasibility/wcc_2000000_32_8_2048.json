@@ -1,0 +1,2600 @@
+[
+  {
+    "nodes": 2000000,
+    "partitions": 32,
+    "s3_prefix": "wcc-graphs/wcc-2000000",
+    "standalone": {
+      "num_components": 10,
+      "time_s": 0.66,
+      "execution_time_ms": 83,
+      "total_time_ms": 660,
+      "component_hash": "f7311b3bddf58365"
+    },
+    "burst": {
+      "num_components": 10,
+      "time_s": 4.328,
+      "time_ms": 4328.0,
+      "total_time_s": 10.904,
+      "total_time_ms": 4657,
+      "host_total_time_ms": 10904.0,
+      "processing_time_ms": 4328.0,
+      "timing_details": {
+        "cold_start_ms": 4188,
+        "stagger_ms": 3096,
+        "computation_ms": 4328,
+        "warm_total_ms": 4657,
+        "total_ms": 10904
+      },
+      "component_hash": "f7311b3bddf58365",
+      "diagnostics": {
+        "activation_ids": [
+          "449baec27a0941679baec27a09516738",
+          "10c55d6a94b846c5855d6a94b8f6c53e",
+          "1fbfe3ffe21644a0bfe3ffe21694a091",
+          "ef62b8d059b848a4a2b8d059b868a41c"
+        ],
+        "timed_out_locally": 0,
+        "command_exited": 0,
+        "entries": [
+          {
+            "activation_id": "449baec27a0941679baec27a09516738",
+            "local_result": [
+              {
+                "bucket": "test-bucket",
+                "component_hash": "f7311b3bddf58365",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": 10,
+                "results": "\n=== Optimized Union-Find Results ===\nTotal nodes: 2000000\nConnected components: 10\nComponent hash: f7311b3bddf58365\n============================\n",
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402053"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404085"
+                  },
+                  {
+                    "key": "global_merge_start",
+                    "value": "1775044404085"
+                  },
+                  {
+                    "key": "global_merge_end",
+                    "value": "1775044405219"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044405544"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402055"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402055"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402005"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402005"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402007"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402052"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402050"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402051"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402045"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402045"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402047"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402055"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402055"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402008"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402008"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402009"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402009"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402009"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402054"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402054"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402052"
+                  }
+                ]
+              }
+            ],
+            "openwhisk_status": "success",
+            "openwhisk_success": true,
+            "openwhisk_result": [
+              {
+                "bucket": "test-bucket",
+                "component_hash": "f7311b3bddf58365",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": 10,
+                "results": "\n=== Optimized Union-Find Results ===\nTotal nodes: 2000000\nConnected components: 10\nComponent hash: f7311b3bddf58365\n============================\n",
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402053"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404085"
+                  },
+                  {
+                    "key": "global_merge_start",
+                    "value": "1775044404085"
+                  },
+                  {
+                    "key": "global_merge_end",
+                    "value": "1775044405219"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044405544"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402055"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402055"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402005"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402005"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402007"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402052"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402050"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402051"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402045"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402045"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402047"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402055"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402055"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402008"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402008"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402009"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402009"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402009"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402054"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402054"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044401956"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044401960"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044402049"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044402051"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044402052"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044402052"
+                  }
+                ]
+              }
+            ],
+            "logs_excerpt": []
+          },
+          {
+            "activation_id": "10c55d6a94b846c5855d6a94b8f6c53e",
+            "local_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403997"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403997"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403998"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404064"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404064"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404044"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404045"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404046"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404046"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404041"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404049"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404049"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404046"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404048"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404048"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404042"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404043"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403983"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403995"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403995"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404026"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404026"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404026"
+                  }
+                ]
+              }
+            ],
+            "openwhisk_status": "success",
+            "openwhisk_success": true,
+            "openwhisk_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403997"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403997"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403998"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404064"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404064"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404044"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404045"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404046"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404046"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404041"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404049"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404049"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404045"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404046"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404048"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404048"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403982"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044404041"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404042"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404043"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404043"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044403983"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044403987"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403995"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403995"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044404026"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044404026"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044404026"
+                  }
+                ]
+              }
+            ],
+            "logs_excerpt": []
+          },
+          {
+            "activation_id": "1fbfe3ffe21644a0bfe3ffe21694a091",
+            "local_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403081"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403081"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400946"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400946"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400976"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400976"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400943"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400943"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400984"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400984"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400891"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400891"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400983"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400983"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400983"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400983"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400945"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400945"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400945"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400980"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400979"
+                  }
+                ]
+              }
+            ],
+            "openwhisk_status": "success",
+            "openwhisk_success": true,
+            "openwhisk_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403081"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403081"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400946"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400946"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400976"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400976"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400943"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400943"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400984"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400984"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400891"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400891"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400983"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400983"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400983"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400983"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400944"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400945"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400945"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400945"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400947"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400977"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400980"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400980"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044400887"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044400892"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044400978"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044400979"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044400979"
+                  }
+                ]
+              }
+            ],
+            "logs_excerpt": []
+          },
+          {
+            "activation_id": "ef62b8d059b848a4a2b8d059b868a41c",
+            "local_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403035"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403058"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403058"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403037"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403038"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403038"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402975"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402975"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403043"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403043"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403037"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403039"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403042"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403042"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403040"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403035"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403036"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403001"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403001"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403002"
+                  }
+                ]
+              }
+            ],
+            "openwhisk_status": "success",
+            "openwhisk_success": true,
+            "openwhisk_result": [
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403035"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403058"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403058"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403037"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403038"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403038"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402975"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402975"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403041"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403043"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403043"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403037"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403039"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403042"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403042"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403039"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403040"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403040"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403034"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403035"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403036"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403036"
+                  }
+                ]
+              },
+              {
+                "bucket": "test-bucket",
+                "key": "wcc-graphs/wcc-2000000",
+                "num_components": null,
+                "timestamps": [
+                  {
+                    "key": "worker_start",
+                    "value": "1775044402972"
+                  },
+                  {
+                    "key": "get_input",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "local_uf_start",
+                    "value": "1775044402976"
+                  },
+                  {
+                    "key": "get_input_end",
+                    "value": "1775044403001"
+                  },
+                  {
+                    "key": "local_uf_end",
+                    "value": "1775044403001"
+                  },
+                  {
+                    "key": "reduce_start",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "reduce_end",
+                    "value": "1775044403002"
+                  },
+                  {
+                    "key": "worker_end",
+                    "value": "1775044403002"
+                  }
+                ]
+              }
+            ],
+            "logs_excerpt": []
+          }
+        ]
+      }
+    },
+    "validation": "PASSED"
+  }
+]

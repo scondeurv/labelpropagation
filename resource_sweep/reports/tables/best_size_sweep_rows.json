@@ -1,0 +1,180 @@
+{
+  "results": [
+    {
+      "algorithm": "bfs",
+      "nodes": 100000,
+      "burst_cold_ms": 8849.0,
+      "burst_warm_ms": 1049.0,
+      "spark_total_ms": 14896.0,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=4 e=4 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 1.6833540513052323
+    },
+    {
+      "algorithm": "bfs",
+      "nodes": 500000,
+      "burst_cold_ms": 8839.0,
+      "burst_warm_ms": 1564.0,
+      "spark_total_ms": 20176.67,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=4 e=4 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 2.2826869555379568
+    },
+    {
+      "algorithm": "bfs",
+      "nodes": 1000000,
+      "burst_cold_ms": 8828.0,
+      "burst_warm_ms": 1887.0,
+      "spark_total_ms": 28734.67,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=8 e=8 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.25494676030811
+    },
+    {
+      "algorithm": "bfs",
+      "nodes": 2000000,
+      "burst_cold_ms": 10860.0,
+      "burst_warm_ms": 2792.0,
+      "spark_total_ms": 39382.0,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.6263351749539594
+    },
+    {
+      "algorithm": "labelpropagation",
+      "nodes": 100000,
+      "burst_cold_ms": 8956.0,
+      "burst_warm_ms": 1084.0,
+      "spark_total_ms": 41606.33,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=4 e=4 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 4.645637561411345
+    },
+    {
+      "algorithm": "labelpropagation",
+      "nodes": 500000,
+      "burst_cold_ms": 8930.0,
+      "burst_warm_ms": 1525.0,
+      "spark_total_ms": 105609.33,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 11.82635274356103
+    },
+    {
+      "algorithm": "labelpropagation",
+      "nodes": 1000000,
+      "burst_cold_ms": 10930.0,
+      "burst_warm_ms": 2052.0,
+      "spark_total_ms": 162753.33,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 14.890515096065872
+    },
+    {
+      "algorithm": "labelpropagation",
+      "nodes": 2000000,
+      "burst_cold_ms": 12960.0,
+      "burst_warm_ms": 2971.0,
+      "spark_total_ms": 355506.33,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 27.431043981481483
+    },
+    {
+      "algorithm": "sssp",
+      "nodes": 100000,
+      "burst_cold_ms": 7058.0,
+      "burst_warm_ms": 1268.0,
+      "spark_total_ms": 19904.33,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=4 e=4 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 2.8201090960612074
+    },
+    {
+      "algorithm": "sssp",
+      "nodes": 500000,
+      "burst_cold_ms": 8922.0,
+      "burst_warm_ms": 2019.0,
+      "spark_total_ms": 31498.0,
+      "burst_profile": "p=8 g=4 mem=3072MB",
+      "spark_profile": "p=8 e=8 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.530374355525667
+    },
+    {
+      "algorithm": "sssp",
+      "nodes": 1000000,
+      "burst_cold_ms": 10928.0,
+      "burst_warm_ms": 3111.0,
+      "spark_total_ms": 39181.67,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=8 e=8 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.585438323572474
+    },
+    {
+      "algorithm": "sssp",
+      "nodes": 2000000,
+      "burst_cold_ms": 12893.0,
+      "burst_warm_ms": 5113.0,
+      "spark_total_ms": 57941.0,
+      "burst_profile": "p=4 g=2 mem=4096MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 4.493988986271621
+    },
+    {
+      "algorithm": "wcc",
+      "nodes": 100000,
+      "burst_cold_ms": 10901.0,
+      "burst_warm_ms": 3156.0,
+      "spark_total_ms": 17611.0,
+      "burst_profile": "p=4 g=1 mem=4096MB",
+      "spark_profile": "p=8 e=8 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 1.615539858728557
+    },
+    {
+      "algorithm": "wcc",
+      "nodes": 500000,
+      "burst_cold_ms": 10877.0,
+      "burst_warm_ms": 3321.0,
+      "spark_total_ms": 24047.0,
+      "burst_profile": "p=32 g=8 mem=2048MB",
+      "spark_profile": "p=8 e=8 mem=6g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 2.2108118047255676
+    },
+    {
+      "algorithm": "wcc",
+      "nodes": 1000000,
+      "burst_cold_ms": 8889.0,
+      "burst_warm_ms": 2586.0,
+      "spark_total_ms": 33065.0,
+      "burst_profile": "p=4 g=1 mem=4096MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.7197660029249633
+    },
+    {
+      "algorithm": "wcc",
+      "nodes": 2000000,
+      "burst_cold_ms": 10892.0,
+      "burst_warm_ms": 4336.0,
+      "spark_total_ms": 42978.33,
+      "burst_profile": "p=4 g=1 mem=4096MB",
+      "spark_profile": "p=16 e=16 mem=3g",
+      "cold_winner": "burst",
+      "spark_over_burst_cold": 3.9458621006243115
+    }
+  ]
+}

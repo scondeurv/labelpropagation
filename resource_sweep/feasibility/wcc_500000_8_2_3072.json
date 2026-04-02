@@ -1,0 +1,32 @@
+[
+  {
+    "nodes": 500000,
+    "partitions": 8,
+    "s3_prefix": "wcc-graphs/wcc-500000",
+    "standalone": {
+      "num_components": 10,
+      "time_s": 0.196,
+      "execution_time_ms": 27,
+      "total_time_ms": 196,
+      "component_hash": "8340f6cd8dc1fd35"
+    },
+    "burst": {
+      "num_components": 10,
+      "time_s": 1.322,
+      "time_ms": 1322.0,
+      "total_time_s": 8.865,
+      "total_time_ms": 1418,
+      "host_total_time_ms": 8865.0,
+      "processing_time_ms": 1322.0,
+      "timing_details": {
+        "cold_start_ms": 4169,
+        "stagger_ms": 1047,
+        "computation_ms": 1322,
+        "warm_total_ms": 1418,
+        "total_ms": 8865
+      },
+      "component_hash": "8340f6cd8dc1fd35"
+    },
+    "validation": "PASSED"
+  }
+]
