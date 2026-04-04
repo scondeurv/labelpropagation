@@ -233,7 +233,7 @@ def run_probe(args: argparse.Namespace) -> dict:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the generic Burst probe used by the ATC25-style campaign.")
+    parser = argparse.ArgumentParser(description="Run the generic Burst probe used by the runtime characterization campaign.")
     parser.add_argument("--mode", choices=("startup", "load", "broadcast", "all_to_all", "ptp", "ptp_pairs"), required=True)
     parser.add_argument("--workers", type=int, required=True, help="Logical workers in the burst")
     parser.add_argument("--granularity", type=int, default=1, help="Partitions per worker")

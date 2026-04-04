@@ -305,23 +305,13 @@ def run_applications(args: argparse.Namespace) -> None:
         save_payload(output_path, {"results": rows})
 
 
-def run_reports(args: argparse.Namespace) -> None:
-    python = repo_python("labelpropagation")
-    command = [str(python), "generate_runtime_evaluation_reports.py"]
-    if args.force:
-        command.append("--force")
-    env = os.environ.copy()
-    env.setdefault("MPLCONFIGDIR", "/tmp/mpl-runtime-eval")
-    subprocess.run(command, cwd=HERE, check=True, env=env)
-
-
 def parse_int_list(raw: str) -> list[int]:
     return [int(token.strip()) for token in raw.split(",") if token.strip()]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run the ATC25-style characterization and application campaign.")
-    parser.add_argument("--phase", choices=("characterization", "applications", "reports"), required=True)
+    parser = argparse.ArgumentParser(description="Run the runtime characterization and application data campaign.")
+    parser.add_argument("--phase", choices=("characterization", "applications"), required=True)
     parser.add_argument("--workers", type=parse_int_list, default=parse_int_list("4,8,16"), help="Comma-separated worker counts.")
     parser.add_argument("--probe-memory-mb", type=int, default=1024)
     parser.add_argument("--collective-payload-bytes", type=int, default=1048576)
@@ -350,10 +340,8 @@ def main() -> None:
     ensure_dirs()
     if args.phase == "characterization":
         run_characterization(args)
-    elif args.phase == "applications":
-        run_applications(args)
     else:
-        run_reports(args)
+        run_applications(args)
 
 
 if __name__ == "__main__":
