@@ -189,8 +189,8 @@ async fn load_partition_flat(
     s3_client: &S3Client,
     worker_id: u32,
 ) -> (CSRGraph, Vec<(u32, u32)>) {
-    let start_part = worker_id * params.granularity;
-    let end_part = (worker_id + 1) * params.granularity;
+    let start_part = worker_id;
+    let end_part = worker_id + 1;
 
     // Fetch Multiple partitions in parallel
     let mut fetch_futures = Vec::new();
