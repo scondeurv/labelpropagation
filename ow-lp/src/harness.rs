@@ -12,7 +12,7 @@ use std::{
     thread,
 };
 
-/// Label Propagation testing executable
+/// Manual harness for running the action against a local Burst middleware setup.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {

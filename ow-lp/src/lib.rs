@@ -1,8 +1,8 @@
+use ahash::AHashMap as HashMap;
 use std::{
     cmp::Ordering,
     time::{SystemTime, UNIX_EPOCH},
 };
-use ahash::AHashMap as HashMap;
 
 use aws_config::Region;
 use aws_credential_types::Credentials;
@@ -32,6 +32,8 @@ struct Input {
     partitions: u32,
     /// Number of partitions handled by this specific worker
     granularity: u32,
+    #[serde(default)]
+    group_id: Option<u32>,
     /// Timeout for collective operations in seconds (defaults to auto-calculated)
     timeout_seconds: Option<u64>,
 }
@@ -155,11 +157,8 @@ struct CountMessage(pub u64);
 
 /// Efficient Graph representation using Compressed Sparse Row (CSR) format
 struct CSRGraph {
-    /// List of node IDs owned by this worker
     owned_nodes: Vec<u32>,
-    /// Offsets into the `flat_edges` vector for each node
     offsets: Vec<u32>,
-    /// Adjacency list stored in a single flat vector
     flat_edges: Vec<u32>,
 }
 
@@ -179,109 +178,85 @@ impl From<CountMessage> for Bytes {
     }
 }
 
-/// Load adjacency for this worker partition from S3.
-/// 
-/// It tries to fetch pre-partitioned files (e.g., `part-0`, `part-1`) based on 
-/// the worker's ID and granularity. If that fails, it falls back to reading 
-/// the full graph and filtering locally.
-async fn load_partition_flat(
-    params: &Input,
-    s3_client: &S3Client,
+fn logical_worker_id(worker_id: u32, granularity: u32, group_id: Option<u32>) -> u32 {
+    group_id.unwrap_or_else(|| worker_id / granularity.max(1))
+}
+
+fn assigned_partition_range(
+    partitions: u32,
+    granularity: u32,
+    logical_worker: u32,
+) -> std::ops::Range<u32> {
+    let start = logical_worker * granularity;
+    let end = start + granularity;
+    assert!(
+        end <= partitions,
+        "logical worker {logical_worker} assigned partitions [{start}, {end}) outside total partitions {partitions}"
+    );
+    start..end
+}
+
+fn parse_partition_body(
     worker_id: u32,
-) -> (CSRGraph, Vec<(u32, u32)>) {
-    let start_part = worker_id;
-    let end_part = worker_id + 1;
-
-    // Fetch Multiple partitions in parallel
-    let mut fetch_futures = Vec::new();
-    for p in start_part..end_part {
-        let part_key = format!("{}/part-{:05}", params.input_data.key, p);
-        fetch_futures.push(async move {
-            s3_client
-                .get_object()
-                .bucket(&params.input_data.bucket)
-                .key(&part_key)
-                .send()
-                .await
-        });
+    part_key: &str,
+    body: &str,
+    num_nodes: u32,
+    edges: &mut Vec<(u32, u32)>,
+    initial_labels: &mut Vec<(u32, u32)>,
+) -> Result<(), String> {
+    if body.trim().is_empty() {
+        return Err(format!(
+            "[Worker {worker_id}] partition {part_key} is empty"
+        ));
     }
 
-    let results = join_all(fetch_futures).await;
-    let mut edges = Vec::with_capacity(100_000 * params.granularity as usize);
-    let mut initial_labels = Vec::new();
-
-    let mut all_found = true;
-    for result in results {
-        match result {
-            Ok(output) => {
-                if let Ok(data) = output.body.collect().await {
-                    let bytes = data.to_vec();
-                    if let Ok(body_str) = std::str::from_utf8(&bytes) {
-                        // Graph lines format: src_node \t dst_node [\t initial_label]
-                        for line in body_str.lines() {
-                            if line.trim().is_empty() { continue; }
-                            let mut it = line.split('\t');
-                            let src = it.next().and_then(|s| s.parse::<u32>().ok());
-                            let dst = it.next().and_then(|s| s.parse::<u32>().ok());
-                            let label = it.next().and_then(|s| s.parse::<i64>().ok());
-                            if let (Some(s), Some(d)) = (src, dst) {
-                                // Validate node IDs are within bounds
-                                if s >= params.num_nodes || d >= params.num_nodes {
-                                    eprintln!("[Worker {}] Invalid edge: {} -> {} (max={})", worker_id, s, d, params.num_nodes - 1);
-                                    continue;
-                                }
-                                edges.push((s, d));
-                                // Only process valid positive labels
-                                if let Some(l) = label { if l >= 0 { initial_labels.push((s, l as u32)); } }
-                            }
-                        }
-                    }
-                } else { all_found = false; break; }
-            }
-            Err(_) => { all_found = false; break; }
+    let initial_edge_count = edges.len();
+    for line in body.lines() {
+        if line.trim().is_empty() {
+            continue;
         }
-    }
-
-    // Fallback: Read full graph file if partitions aren't available
-    if !all_found || edges.is_empty() {
-        println!("[Worker {}] Falling back to full graph: {}", worker_id, params.input_data.key);
-        if let Ok(output) = s3_client.get_object().bucket(&params.input_data.bucket).key(&params.input_data.key).send().await {
-            if let Ok(data) = output.body.collect().await {
-                let bytes = data.to_vec();
-                if let Ok(body_str) = std::str::from_utf8(&bytes) {
-                    for line in body_str.lines() {
-                        if line.trim().is_empty() { continue; }
-                        let mut it = line.split('\t');
-                        let src = it.next().and_then(|s| s.parse::<u32>().ok());
-                        let dst = it.next().and_then(|s| s.parse::<u32>().ok());
-                        let label = it.next().and_then(|s| s.parse::<i64>().ok());
-                        if let (Some(s), Some(d)) = (src, dst) {
-                            // Validate node IDs are within bounds
-                            if s >= params.num_nodes || d >= params.num_nodes {
-                                eprintln!("[Worker {}] Invalid edge in fallback: {} -> {} (max={})", worker_id, s, d, params.num_nodes - 1);
-                                continue;
-                            }
-                            // Only keep edges where 'src' belongs to this worker
-                            let target_worker = (s % params.partitions) / params.granularity;
-                            if target_worker == worker_id {
-                                edges.push((s, d));
-                                if let Some(l) = label { if l >= 0 { initial_labels.push((s, l as u32)); } }
-                            }
-                        }
-                    }
+        let mut it = line.split('\t');
+        let src = it.next().and_then(|s| s.parse::<u32>().ok());
+        let dst = it.next().and_then(|s| s.parse::<u32>().ok());
+        let label = it.next().and_then(|s| s.parse::<i64>().ok());
+        if let (Some(s), Some(d)) = (src, dst) {
+            if s >= num_nodes || d >= num_nodes {
+                eprintln!(
+                    "[Worker {}] Invalid edge in {}: {} -> {} (max={})",
+                    worker_id,
+                    part_key,
+                    s,
+                    d,
+                    num_nodes - 1
+                );
+                continue;
+            }
+            edges.push((s, d));
+            if let Some(l) = label {
+                if l >= 0 {
+                    initial_labels.push((s, l as u32));
                 }
             }
         }
     }
 
-    // Convert Edgelist to CSR format for efficient neighbor lookup
+    if edges.len() == initial_edge_count {
+        return Err(format!(
+            "[Worker {worker_id}] partition {part_key} contains no valid edges"
+        ));
+    }
+
+    Ok(())
+}
+
+fn build_csr_graph(num_nodes: u32, mut edges: Vec<(u32, u32)>) -> CSRGraph {
     edges.sort_unstable_by_key(|e| e.0);
     let mut owned_nodes = Vec::new();
-    let mut offsets = vec![0u32; (params.num_nodes + 1) as usize];
+    let mut offsets = vec![0u32; (num_nodes + 1) as usize];
     let mut flat_edges = Vec::with_capacity(edges.len());
     let mut current_offset = 0u32;
     let mut edge_idx = 0;
-    for n in 0..params.num_nodes {
+    for n in 0..num_nodes {
         offsets[n as usize] = current_offset;
         let mut found = false;
         while edge_idx < edges.len() && edges[edge_idx].0 == n {
@@ -290,26 +265,107 @@ async fn load_partition_flat(
             current_offset += 1;
             found = true;
         }
-        if found { owned_nodes.push(n); }
+        if found {
+            owned_nodes.push(n);
+        }
     }
-    offsets[params.num_nodes as usize] = current_offset;
-
-    println!("[Worker {}] Final graph size: {} owned nodes, {} edges", worker_id, owned_nodes.len(), flat_edges.len());
-    if flat_edges.is_empty() {
-        panic!("[Worker {}] CRITICAL: No edges loaded! Check S3 connectivity and bucket: {}", worker_id, params.input_data.key);
+    offsets[num_nodes as usize] = current_offset;
+    CSRGraph {
+        owned_nodes,
+        offsets,
+        flat_edges,
     }
-    (CSRGraph { owned_nodes, offsets, flat_edges }, initial_labels)
 }
 
-/// Estimate appropriate timeout based on problem size and cluster configuration
-fn estimate_timeout(num_nodes: u32, burst_size: u32, max_iter: u32) -> u64 {
-    // Base timeout + scaling factor based on nodes, iterations, and inverse of workers
-    let base_time = 60u64; // 1 minute base
-    let node_factor = (num_nodes / 10_000).max(1) as u64;
-    let worker_factor = 10u64 / burst_size.max(1) as u64;
-    let iter_factor = max_iter as u64;
-    
-    base_time + (node_factor * iter_factor * worker_factor)
+fn build_results_report(final_labels: &[u32], num_nodes: u32, completed_iterations: u32) -> String {
+    let mut label_counts: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    for &label in final_labels {
+        *label_counts.entry(label).or_insert(0) += 1;
+    }
+
+    let mut report = String::new();
+    report.push_str("\n=== Label Propagation Results ===\n");
+    report.push_str(&format!("Total nodes: {}\n", num_nodes));
+    report.push_str(&format!("Total iterations: {}\n", completed_iterations));
+    report.push_str("\nLabel Distribution:\n");
+    let mut sorted_labels: Vec<_> = label_counts.iter().collect();
+    sorted_labels.sort_by_key(|&(label, _)| label);
+    for (label, count) in sorted_labels.iter().take(20) {
+        if **label == UNKNOWN {
+            report.push_str(&format!("  UNKNOWN: {} nodes\n", count));
+        } else {
+            report.push_str(&format!("  Label {}: {} nodes\n", label, count));
+        }
+    }
+
+    report.push_str("\nSample nodes (first 20):\n");
+    for i in 0..20.min(num_nodes as usize) {
+        let label = final_labels[i];
+        let label_str = if label == UNKNOWN {
+            "UNKNOWN".to_string()
+        } else {
+            label.to_string()
+        };
+        report.push_str(&format!("  Node {}: Label {}\n", i, label_str));
+    }
+    report.push_str("=================================\n");
+    report
+}
+
+async fn load_partition_flat(
+    params: &Input,
+    s3_client: &S3Client,
+    worker_id: u32,
+) -> Result<(CSRGraph, Vec<(u32, u32)>), String> {
+    let logical_worker = logical_worker_id(worker_id, params.granularity, params.group_id);
+    let part_range =
+        assigned_partition_range(params.partitions, params.granularity, logical_worker);
+    let mut fetch_futures = Vec::new();
+    for p in part_range.clone() {
+        let part_key = format!("{}/part-{:05}", params.input_data.key, p);
+        fetch_futures.push(async move {
+            let output = s3_client
+                .get_object()
+                .bucket(&params.input_data.bucket)
+                .key(&part_key)
+                .send()
+                .await
+                .map_err(|err| format!("[Worker {worker_id}] failed to fetch {part_key}: {err}"))?;
+            let data =
+                output.body.collect().await.map_err(|err| {
+                    format!("[Worker {worker_id}] failed to read {part_key}: {err}")
+                })?;
+            let body = std::str::from_utf8(&data.to_vec())
+                .map_err(|err| format!("[Worker {worker_id}] invalid UTF-8 in {part_key}: {err}"))?
+                .to_owned();
+            Ok::<(String, String), String>((part_key, body))
+        });
+    }
+
+    let results = join_all(fetch_futures).await;
+    let mut edges = Vec::with_capacity(100_000 * params.granularity as usize);
+    let mut initial_labels = Vec::new();
+    for result in results {
+        let (part_key, body) = result?;
+        parse_partition_body(
+            worker_id,
+            &part_key,
+            &body,
+            params.num_nodes,
+            &mut edges,
+            &mut initial_labels,
+        )?;
+    }
+
+    let graph = build_csr_graph(params.num_nodes, edges);
+    println!(
+        "[Worker {}] Loaded partitions {:?}: {} owned nodes, {} edges",
+        worker_id,
+        part_range,
+        graph.owned_nodes.len(),
+        graph.flat_edges.len()
+    );
+    Ok((graph, initial_labels))
 }
 
 fn should_continue(iter: u32, max_iter: Option<u32>, changed: u32, threshold: u32) -> bool {
@@ -348,13 +404,13 @@ fn majority_label(counts: &mut HashMap<u32, usize>, current: u32) -> u32 {
     best
 }
 
-/// Main distributed Label Propagation logic
-fn label_propagation(
-    params: Input,
+fn run_label_propagation_core(
+    params: &Input,
     middleware: &MiddlewareActorHandle<LabelsMessage>,
-) -> Output {
-    let mut timestamps = vec![timestamp("worker_start")];
-
+    graph: CSRGraph,
+    initial_labels_vec: Vec<(u32, u32)>,
+    mut timestamps: Vec<Timestamp>,
+) -> (Vec<Timestamp>, Vec<u32>, u32) {
     let worker = middleware.info.worker_id;
     let burst_size = middleware.info.burst_size;
     println!(
@@ -362,7 +418,189 @@ fn label_propagation(
         params.num_nodes
     );
 
-    // Initialize the S3 client using provided credentials
+    // Seed the local labels and leave the rest as UNKNOWN for now.
+    let mut labels = vec![UNKNOWN; params.num_nodes as usize];
+    let mut initial_labels = HashMap::default();
+    for (node, label) in initial_labels_vec {
+        if (node as usize) < labels.len() {
+            labels[node as usize] = label;
+            initial_labels.insert(node, label);
+        }
+    }
+
+    let is_seed: Vec<bool> = {
+        let mut v = vec![false; params.num_nodes as usize];
+        for &node in initial_labels.keys() {
+            v[node as usize] = true;
+        }
+        v
+    };
+
+    // Check whether any worker has seed labels so we can choose the right mode.
+    let local_has_seeds_val = if !initial_labels.is_empty() { 1 } else { 0 };
+    let reduced_seeds_msg = middleware
+        .reduce(LabelsMessage(vec![local_has_seeds_val]), |mut a, b| {
+            if a.0[0] == 1 || b.0[0] == 1 {
+                a.0[0] = 1;
+            }
+            a
+        })
+        .unwrap();
+
+    let global_seeds_msg = if let Some(msg) = reduced_seeds_msg {
+        middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
+    } else {
+        middleware.broadcast(None, ROOT_WORKER).unwrap()
+    };
+    let global_has_seeds = global_seeds_msg.0[0] == 1;
+
+    // Without seeds, start in unsupervised mode using each node ID as its label.
+    if !global_has_seeds && initial_labels.is_empty() {
+        println!(
+            "[Worker {}] No initial labels found globally, using unsupervised mode",
+            worker
+        );
+        for (idx, label) in labels.iter_mut().enumerate() {
+            *label = idx as u32;
+        }
+    }
+
+    // Share the initial labels so every worker starts from the same global view.
+    let initial_msg = LabelsMessage(labels);
+    let combined = middleware
+        .reduce(initial_msg, |mut left, right| {
+            for (a, b) in left.0.iter_mut().zip(right.0.iter()) {
+                if *a == UNKNOWN {
+                    *a = *b;
+                }
+            }
+            left
+        })
+        .unwrap();
+
+    let global_labels = if let Some(msg) = combined {
+        middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
+    } else {
+        middleware.broadcast(None, ROOT_WORKER).unwrap()
+    };
+
+    let max_iter = params.max_iterations.unwrap_or(MAX_ITER);
+    let threshold = params.convergence_threshold.unwrap_or(0);
+    let mut iter = 0;
+    let mut completed_iterations = 0;
+    let unsupervised_mode = !global_has_seeds;
+
+    let avg_degree = if graph.owned_nodes.is_empty() {
+        10
+    } else {
+        (graph.flat_edges.len() / graph.owned_nodes.len()).max(1)
+    };
+    let mut counts_map = HashMap::with_capacity(avg_degree.min(100));
+
+    let mut labels_a = global_labels.0;
+    let mut labels_b = vec![UNKNOWN; params.num_nodes as usize];
+    let mut use_a_as_read = true;
+
+    let extended_size = (params.num_nodes as usize) + 1;
+    let mut local_updates = vec![UNKNOWN; extended_size];
+
+    // Run the propagation loop until the labels converge or we hit the iteration limit.
+    while iter < max_iter {
+        timestamps.push(timestamp(&format!("iter_{}_start", iter)));
+        let read_buf = if use_a_as_read { &labels_a } else { &labels_b };
+        local_updates.fill(UNKNOWN);
+        let mut local_changed: u32 = 0;
+
+        // Recompute the labels for the nodes owned by this worker.
+        for &node in &graph.owned_nodes {
+            let idx = node as usize;
+            let current_label = read_buf[idx];
+
+            if !unsupervised_mode && is_seed[idx] {
+                local_updates[idx] = current_label;
+                continue;
+            }
+
+            let start = graph.offsets[idx];
+            let end = graph.offsets[idx + 1];
+
+            for i in start..end {
+                let neighbor = graph.flat_edges[i as usize] as usize;
+                let label = read_buf[neighbor];
+                if label != UNKNOWN {
+                    *counts_map.entry(label).or_insert(0) += 1;
+                }
+            }
+
+            let new_label = majority_label(&mut counts_map, current_label);
+            local_updates[idx] = new_label;
+            if new_label != current_label {
+                local_changed += 1;
+            }
+        }
+        local_updates[params.num_nodes as usize] = local_changed;
+        timestamps.push(timestamp(&format!("iter_{}_compute", iter)));
+
+        // Merge local updates into one global label vector and sum the change counts.
+        let reduced = middleware
+            .reduce(
+                LabelsMessage(std::mem::replace(&mut local_updates, Vec::new())),
+                |mut left, right| {
+                    let n = left.0.len() - 1;
+                    for i in 0..n {
+                        if left.0[i] == UNKNOWN {
+                            left.0[i] = right.0[i];
+                        }
+                    }
+                    left.0[n] = left.0[n].saturating_add(right.0[n]);
+                    left
+                },
+            )
+            .unwrap();
+        timestamps.push(timestamp(&format!("iter_{}_reduce", iter)));
+
+        // Broadcast the merged labels so the next round reads a synchronized state.
+        let global = if let Some(msg) = reduced {
+            middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
+        } else {
+            middleware.broadcast(None, ROOT_WORKER).unwrap()
+        };
+        timestamps.push(timestamp(&format!("iter_{}_broadcast", iter)));
+
+        let total_changed = global.0[params.num_nodes as usize];
+        if use_a_as_read {
+            labels_b.copy_from_slice(&global.0[..params.num_nodes as usize]);
+        } else {
+            labels_a.copy_from_slice(&global.0[..params.num_nodes as usize]);
+        }
+
+        local_updates = global.0;
+        local_updates.resize(extended_size, UNKNOWN);
+
+        use_a_as_read = !use_a_as_read;
+        completed_iterations += 1;
+
+        if worker == ROOT_WORKER {
+            println!("[Worker {worker}] iter {iter}: changed={total_changed}");
+        }
+        if !should_continue(iter, params.max_iterations, total_changed, threshold) {
+            break;
+        }
+        timestamps.push(timestamp(&format!("iter_{}_end", iter)));
+        iter += 1;
+    }
+
+    timestamps.push(timestamp("worker_end"));
+    let final_labels = if use_a_as_read { labels_a } else { labels_b };
+    (timestamps, final_labels, completed_iterations)
+}
+
+fn label_propagation(params: Input, middleware: &MiddlewareActorHandle<LabelsMessage>) -> Output {
+    // Set up the worker runtime and the clients needed for this invocation.
+    let mut timestamps = vec![timestamp("worker_start")];
+
+    let worker = middleware.info.worker_id;
+
     let credentials_provider = Credentials::from_keys(
         params.input_data.aws_access_key_id.clone(),
         params.input_data.aws_secret_access_key.clone(),
@@ -387,247 +625,35 @@ fn label_propagation(
         .build()
         .unwrap();
 
-    // Load graph partition for this worker from S3
+    // Load the partitions assigned to this worker and build the local CSR graph.
     timestamps.push(timestamp("get_input"));
-    let (graph, initial_labels_vec) = rt.block_on(load_partition_flat(&params, &s3_client, worker));
+    let (graph, initial_labels_vec) = rt
+        .block_on(load_partition_flat(&params, &s3_client, worker))
+        .unwrap_or_else(|err| panic!("{err}"));
     timestamps.push(timestamp("get_input_end"));
 
-    // Initialize local portion of the labels vector
-    let mut labels = vec![UNKNOWN; params.num_nodes as usize];
-    let mut initial_labels = HashMap::default();
-    for (node, label) in initial_labels_vec {
-        if (node as usize) < labels.len() {
-            labels[node as usize] = label;
-            initial_labels.insert(node, label);
-        }
-    }
+    let (mut timestamps, final_labels, completed_iterations) =
+        run_label_propagation_core(&params, middleware, graph, initial_labels_vec, timestamps);
 
-    // O(1) seed lookup for the hot loop (replaces HashMap::contains_key)
-    let is_seed: Vec<bool> = {
-        let mut v = vec![false; params.num_nodes as usize];
-        for &node in initial_labels.keys() {
-            v[node as usize] = true;
-        }
-        v
-    };
-
-    // Phase 1: Distributed Coordination to check if any worker has seed labels
-    // This determines if we run in supervised mode (seed-based) or unsupervised mode (ID-based)
-    let local_has_seeds_val = if !initial_labels.is_empty() { 1 } else { 0 };
-    let reduced_seeds_msg = middleware
-        .reduce(LabelsMessage(vec![local_has_seeds_val]), |mut a, b| {
-            if a.0[0] == 1 || b.0[0] == 1 { a.0[0] = 1; }
-            a
-        })
-        .unwrap();
-
-    let global_seeds_msg = if let Some(msg) = reduced_seeds_msg {
-        middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
-    } else {
-        middleware.broadcast(None, ROOT_WORKER).unwrap()
-    };
-    let global_has_seeds = global_seeds_msg.0[0] == 1;
-    
-    // In unsupervised mode, each node starts with its own ID as its label
-    if !global_has_seeds && initial_labels.is_empty() {
-        println!("[Worker {}] No initial labels found globally, using unsupervised mode", worker);
-        for (idx, label) in labels.iter_mut().enumerate() {
-            *label = idx as u32;
-        }
-    }
-
-    // Phase 2: Synchronize initial labels across all workers
-    // This ensures every worker has a complete view of all initial/seed labels
-    let initial_msg = LabelsMessage(labels);
-    let combined = middleware
-        .reduce(initial_msg, |mut left, right| {
-            for (a, b) in left.0.iter_mut().zip(right.0.iter()) {
-                if *a == UNKNOWN { *a = *b; }
-            }
-            left
-        })
-        .unwrap();
-
-    let global_labels = if let Some(msg) = combined {
-        middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
-    } else {
-        middleware.broadcast(None, ROOT_WORKER).unwrap()
-    };
-
-    let max_iter = params.max_iterations.unwrap_or(MAX_ITER);
-    let threshold = params.convergence_threshold.unwrap_or(0);
-    let mut iter = 0;
-    let unsupervised_mode = !global_has_seeds;
-    
-    // Pre-allocate counts_map with estimated capacity to reduce rehashing
-    let avg_degree = if graph.owned_nodes.is_empty() {
-        10
-    } else {
-        (graph.flat_edges.len() / graph.owned_nodes.len()).max(1)
-    };
-    let mut counts_map = HashMap::with_capacity(avg_degree.min(100));
-    
-    // Double-buffering: separate read and write buffers to prevent race conditions
-    let mut labels_a = global_labels.0;
-    let mut labels_b = vec![UNKNOWN; params.num_nodes as usize];
-    let mut use_a_as_read = true;
-
-    // Pre-allocate local_updates with extra slot for piggybacked change count.
-    // This buffer is recycled across iterations to avoid per-iteration allocation.
-    let extended_size = (params.num_nodes as usize) + 1;
-    let mut local_updates = vec![UNKNOWN; extended_size];
-
-    // Main Iterative Loop
-    // Optimization: convergence check is piggybacked on the label reduce+broadcast,
-    // cutting communication rounds from 4 to 2 per iteration.
-    while iter < max_iter {
-        timestamps.push(timestamp(&format!("iter_{}_start", iter)));
-
-        // Select read buffer
-        let read_buf = if use_a_as_read { &labels_a } else { &labels_b };
-
-        // 1. Compute local updates: each worker updates labels for its owned nodes
-        local_updates.fill(UNKNOWN);
-        let mut local_changed: u32 = 0;
-
-        for &node in &graph.owned_nodes {
-            let idx = node as usize;
-            let current_label = read_buf[idx];
-
-            // Primary constraint: don't update seed labels in supervised mode
-            if !unsupervised_mode && is_seed[idx] {
-                local_updates[idx] = current_label;
-                continue;
-            }
-
-            // Majority Label Rule: choose the most common label among neighbors
-            let start = graph.offsets[idx];
-            let end = graph.offsets[idx + 1];
-            
-            for i in start..end {
-                let neighbor = graph.flat_edges[i as usize] as usize;
-                let label = read_buf[neighbor];
-                if label != UNKNOWN {
-                    *counts_map.entry(label).or_insert(0) += 1;
-                }
-            }
-
-            let new_label = majority_label(&mut counts_map, current_label);
-            local_updates[idx] = new_label;
-            if new_label != current_label {
-                local_changed += 1;
-            }
-        }
-        // Piggyback the change count at position num_nodes (avoids a separate reduce round)
-        local_updates[params.num_nodes as usize] = local_changed;
-        timestamps.push(timestamp(&format!("iter_{}_compute", iter)));
-
-        // 2. Single reduce: merge labels across workers + sum piggybacked change counts
-        //    (Previously this was 2 separate reduces: one for labels, one for change count)
-        let reduced = middleware
-            .reduce(LabelsMessage(std::mem::replace(&mut local_updates, Vec::new())), |mut left, right| {
-                let n = left.0.len() - 1;
-                for i in 0..n {
-                    if left.0[i] == UNKNOWN { left.0[i] = right.0[i]; }
-                }
-                // Sum the piggybacked change counts
-                left.0[n] = left.0[n].saturating_add(right.0[n]);
-                left
-            })
-            .unwrap();
-        timestamps.push(timestamp(&format!("iter_{}_reduce", iter)));
-
-        // 3. Single broadcast: all workers receive merged labels + total change count
-        //    (Previously this was 2 broadcasts: labels + stop signal)
-        let global = if let Some(msg) = reduced {
-            middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
-        } else {
-            middleware.broadcast(None, ROOT_WORKER).unwrap()
-        };
-        timestamps.push(timestamp(&format!("iter_{}_broadcast", iter)));
-
-        // Extract piggybacked convergence info
-        let total_changed = global.0[params.num_nodes as usize];
-
-        // Update write buffer with the new global labels
-        if use_a_as_read {
-            labels_b.copy_from_slice(&global.0[..params.num_nodes as usize]);
-        } else {
-            labels_a.copy_from_slice(&global.0[..params.num_nodes as usize]);
-        }
-
-        // Recycle the broadcast result's Vec as local_updates for next iteration (zero alloc)
-        local_updates = global.0;
-        local_updates.resize(extended_size, UNKNOWN);
-
-        use_a_as_read = !use_a_as_read;
-
-        if worker == ROOT_WORKER {
-            println!("[Worker {worker}] iter {iter}: changed={total_changed}");
-        }
-        if !should_continue(iter, params.max_iterations, total_changed, threshold) {
-            break;
-        }
-        timestamps.push(timestamp(&format!("iter_{}_end", iter)));
-        iter += 1;
-    }
-
-    timestamps.push(timestamp("worker_end"));
-
-    // Determine which buffer contains the final labels
-    let final_labels = if use_a_as_read {
-        &labels_a
-    } else {
-        &labels_b
-    };
-
-    // Worker 0 writes final labels to S3 for validation and generates results report
+    // Worker 0 writes the final labels and emits the summary used by validation and benchmarks.
     let results_report = if worker == ROOT_WORKER {
         timestamps.push(timestamp("write_labels_start"));
-        
+
         let labels_map: std::collections::HashMap<String, u32> = (0..params.num_nodes)
             .map(|i| (i.to_string(), final_labels[i as usize]))
             .collect();
-        
-        // Generate label distribution
-        let mut label_counts: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
-        for &label in final_labels.iter() {
-            *label_counts.entry(label).or_insert(0) += 1;
-        }
-        
-        let mut report = String::new();
-        report.push_str("\n=== Label Propagation Results ===\n");
-        report.push_str(&format!("Total nodes: {}\n", params.num_nodes));
-        report.push_str(&format!("Total iterations: {}\n", iter));
-        report.push_str("\nLabel Distribution:\n");
-        let mut sorted_labels: Vec<_> = label_counts.iter().collect();
-        sorted_labels.sort_by_key(|&(label, _)| label);
-        for (label, count) in sorted_labels.iter().take(20) {
-            if **label == UNKNOWN {
-                report.push_str(&format!("  UNKNOWN: {} nodes\n", count));
-            } else {
-                report.push_str(&format!("  Label {}: {} nodes\n", label, count));
-            }
-        }
-        
-        // Add sample of nodes
-        report.push_str("\nSample nodes (first 20):\n");
-        for i in 0..20.min(params.num_nodes as usize) {
-            let label = final_labels[i];
-            let label_str = if label == UNKNOWN { "UNKNOWN".to_string() } else { label.to_string() };
-            report.push_str(&format!("  Node {}: Label {}\n", i, label_str));
-        }
-        report.push_str("=================================\n");
-        
+
+        let report = build_results_report(&final_labels, params.num_nodes, completed_iterations);
         println!("{}", report);
-        
+
         let output_key = format!("{}/output/labels_final.json", params.input_data.key);
 
         if labels_map.len() < 10_000_000 {
             let labels_json = serde_json::json!({ "labels": labels_map });
             let labels_str = serde_json::to_string(&labels_json).unwrap();
             let write_result = rt.block_on(async {
-                s3_client.put_object()
+                s3_client
+                    .put_object()
                     .bucket(&params.input_data.bucket)
                     .key(&output_key)
                     .body(labels_str.into_bytes().into())
@@ -635,13 +661,20 @@ fn label_propagation(
                     .await
             });
             match write_result {
-                Ok(_) => println!("[Worker {}] ✓ Wrote final labels to s3://{}/{}", worker, params.input_data.bucket, output_key),
+                Ok(_) => println!(
+                    "[Worker {}] ✓ Wrote final labels to s3://{}/{}",
+                    worker, params.input_data.bucket, output_key
+                ),
                 Err(e) => eprintln!("[Worker {}] ✗ Failed to write labels: {:?}", worker, e),
             }
         } else {
-            println!("[Worker {}] ! Skipping large JSON serialization for S3 ({} nodes)", worker, labels_map.len());
+            println!(
+                "[Worker {}] ! Skipping large JSON serialization for S3 ({} nodes)",
+                worker,
+                labels_map.len()
+            );
         }
-        
+
         timestamps.push(timestamp("write_labels_end"));
         Some(report)
     } else {
@@ -657,18 +690,16 @@ fn label_propagation(
     }
 }
 
-/// OpenWhisk entrypoint
 pub fn main(args: Value, burst_middleware: Middleware<LabelsMessage>) -> Result<Value, Error> {
     let input: Input = serde_json::from_value(args)?;
-    
-    // Validate partitions are evenly divisible by granularity
+
     if input.partitions % input.granularity != 0 {
         panic!(
             "ERROR: partitions ({}) must be divisible by granularity ({}) for balanced distribution",
             input.partitions, input.granularity
         );
     }
-    
+
     let handle = burst_middleware.get_actor_handle();
     let result = label_propagation(input, &handle);
     serde_json::to_value(result)
@@ -677,30 +708,116 @@ pub fn main(args: Value, burst_middleware: Middleware<LabelsMessage>) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use burst_communication_middleware::{
+        BurstMiddleware, BurstOptions, Middleware, RemoteBroadcastProxy, RemoteMessage,
+        RemoteSendReceiveFactory, RemoteSendReceiveProxy, TokioChannelImpl, TokioChannelOptions,
+    };
+    use std::{
+        collections::{HashMap as StdHashMap, HashSet},
+        sync::Arc,
+        thread,
+    };
 
-    // Helper para crear un grafo simple y ejecutar LP localmente (sin S3, sin middleware)
+    struct DummyRemoteProxy;
+
+    #[async_trait]
+    impl burst_communication_middleware::RemoteSendProxy for DummyRemoteProxy {
+        async fn remote_send(
+            &self,
+            _dest: u32,
+            _msg: RemoteMessage,
+        ) -> burst_communication_middleware::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl burst_communication_middleware::RemoteReceiveProxy for DummyRemoteProxy {
+        async fn remote_recv(
+            &self,
+            _source: u32,
+        ) -> burst_communication_middleware::Result<RemoteMessage> {
+            panic!("remote recv should not be used in the local distributed LP test");
+        }
+    }
+
+    impl RemoteSendReceiveProxy for DummyRemoteProxy {}
+
+    #[async_trait]
+    impl burst_communication_middleware::RemoteBroadcastSendProxy for DummyRemoteProxy {
+        async fn remote_broadcast_send(
+            &self,
+            _msg: RemoteMessage,
+        ) -> burst_communication_middleware::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_trait]
+    impl burst_communication_middleware::RemoteBroadcastReceiveProxy for DummyRemoteProxy {
+        async fn remote_broadcast_recv(
+            &self,
+        ) -> burst_communication_middleware::Result<RemoteMessage> {
+            panic!("remote broadcast recv should not be used in the local distributed LP test");
+        }
+    }
+
+    impl RemoteBroadcastProxy for DummyRemoteProxy {}
+
+    struct DummyRemoteFactory;
+
+    #[async_trait]
+    impl RemoteSendReceiveFactory<()> for DummyRemoteFactory {
+        async fn create_remote_proxies(
+            burst_options: Arc<BurstOptions>,
+            _options: (),
+        ) -> burst_communication_middleware::Result<
+            StdHashMap<
+                u32,
+                (
+                    Box<dyn RemoteSendReceiveProxy>,
+                    Box<dyn RemoteBroadcastProxy>,
+                ),
+            >,
+        > {
+            let current_group = burst_options
+                .group_ranges
+                .get(&burst_options.group_id)
+                .unwrap();
+            Ok(current_group
+                .iter()
+                .map(|worker_id| {
+                    (
+                        *worker_id,
+                        (
+                            Box::new(DummyRemoteProxy) as Box<dyn RemoteSendReceiveProxy>,
+                            Box::new(DummyRemoteProxy) as Box<dyn RemoteBroadcastProxy>,
+                        ),
+                    )
+                })
+                .collect())
+        }
+    }
+
     fn run_lp_local(
-        edges: Vec<(u32, u32, Option<u32>)>, // (src, dst, optional_label)
+        edges: Vec<(u32, u32, Option<u32>)>,
         num_nodes: u32,
         max_iter: u32,
     ) -> Vec<u32> {
-        // Construir grafo CSR
         let mut owned_nodes = Vec::new();
         let mut offsets = vec![0u32; (num_nodes + 1) as usize];
         let mut flat_edges = Vec::new();
-        
-        // Agrupar edges por nodo origen
+
         let mut adj: HashMap<u32, Vec<u32>> = HashMap::default();
         let mut seeds: HashMap<u32, u32> = HashMap::default();
-        
+
         for (src, dst, label) in edges {
             adj.entry(src).or_insert_with(Vec::new).push(dst);
             if let Some(l) = label {
                 seeds.insert(src, l);
             }
         }
-        
-        // Convertir a CSR
         for node in 0..num_nodes {
             if let Some(neighbors) = adj.get(&node) {
                 owned_nodes.push(node);
@@ -709,11 +826,9 @@ mod tests {
             }
         }
         offsets[num_nodes as usize] = flat_edges.len() as u32;
-        
-        // Inicializar labels
         let unsupervised = seeds.is_empty();
         let mut labels = vec![UNKNOWN; num_nodes as usize];
-        
+
         if unsupervised {
             for i in 0..num_nodes {
                 labels[i as usize] = i;
@@ -723,21 +838,19 @@ mod tests {
                 labels[node as usize] = label;
             }
         }
-        
-        // Ejecutar iteraciones de LP
         for _ in 0..max_iter {
             let prev_labels = labels.clone();
             let mut changed = 0;
-            
+
             for &node in &owned_nodes {
                 if !unsupervised && seeds.contains_key(&node) {
-                    continue; // Clamping
+                    continue;
                 }
-                
+
                 let start = offsets[node as usize] as usize;
                 let end = offsets[(node + 1) as usize] as usize;
                 let neighbors = &flat_edges[start..end];
-                
+
                 let mut counts: HashMap<u32, usize> = HashMap::default();
                 for &neighbor in neighbors {
                     let l = prev_labels[neighbor as usize];
@@ -745,15 +858,13 @@ mod tests {
                         *counts.entry(l).or_insert(0) += 1;
                     }
                 }
-                
                 if counts.is_empty() {
                     continue;
                 }
-                
-                // Majority vote con tie-breaking
+
                 let mut best = prev_labels[node as usize];
                 let mut best_count = 0usize;
-                
+
                 for (&label, &count) in &counts {
                     if label == UNKNOWN {
                         continue;
@@ -771,19 +882,146 @@ mod tests {
                         Ordering::Less => {}
                     }
                 }
-                
+
                 if best != prev_labels[node as usize] {
                     labels[node as usize] = best;
                     changed += 1;
                 }
             }
-            
+
             if changed == 0 {
                 break;
             }
         }
-        
+
         labels
+    }
+
+    #[test]
+    fn partition_range_matches_grouped_layout() {
+        assert_eq!(assigned_partition_range(8, 2, 0), 0..2);
+        assert_eq!(assigned_partition_range(8, 2, 1), 2..4);
+        assert_eq!(assigned_partition_range(8, 2, 2), 4..6);
+        assert_eq!(assigned_partition_range(8, 2, 3), 6..8);
+    }
+
+    #[test]
+    fn group_id_overrides_physical_worker_id() {
+        assert_eq!(logical_worker_id(0, 2, Some(0)), 0);
+        assert_eq!(logical_worker_id(1, 2, Some(0)), 0);
+        assert_eq!(logical_worker_id(2, 2, Some(1)), 1);
+        assert_eq!(logical_worker_id(3, 2, Some(1)), 1);
+    }
+
+    #[test]
+    fn empty_partition_body_is_rejected() {
+        let mut edges = Vec::new();
+        let mut labels = Vec::new();
+        let err = parse_partition_body(1, "graphs/part-00002", "", 10, &mut edges, &mut labels)
+            .unwrap_err();
+        assert!(err.contains("partition graphs/part-00002 is empty"));
+    }
+
+    #[test]
+    fn results_report_uses_completed_iteration_count() {
+        let report = build_results_report(&[0, 1, 1, 2], 4, 1);
+        assert!(report.contains("Total iterations: 1"));
+    }
+
+    #[test]
+    fn distributed_lp_converges_to_expected_labels() {
+        let params = Input {
+            input_data: S3InputParams {
+                bucket: "unused".to_string(),
+                key: "unused".to_string(),
+                region: "us-east-1".to_string(),
+                endpoint: None,
+                aws_access_key_id: "unused".to_string(),
+                aws_secret_access_key: "unused".to_string(),
+                aws_session_token: None,
+            },
+            num_nodes: 3,
+            max_iterations: Some(10),
+            convergence_threshold: Some(0),
+            partitions: 2,
+            granularity: 1,
+            group_id: None,
+            timeout_seconds: None,
+        };
+
+        let group_ranges = vec![(0.to_string(), vec![0, 1].into_iter().collect())]
+            .into_iter()
+            .collect::<StdHashMap<String, HashSet<u32>>>();
+
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
+        let proxies = tokio_runtime
+            .block_on(BurstMiddleware::create_proxies::<
+                TokioChannelImpl,
+                DummyRemoteFactory,
+                _,
+                _,
+            >(
+                BurstOptions::new(2, group_ranges, 0.to_string())
+                    .burst_id("lp-local-test".to_string())
+                    .enable_message_chunking(false)
+                    .build(),
+                TokioChannelOptions::new()
+                    .broadcast_channel_size(32)
+                    .build(),
+                (),
+            ))
+            .unwrap();
+
+        let mut actors = proxies
+            .into_iter()
+            .map(|(worker_id, middleware)| {
+                (
+                    worker_id,
+                    Middleware::new(middleware, tokio_runtime.handle().clone()),
+                )
+            })
+            .collect::<StdHashMap<u32, Middleware<LabelsMessage>>>();
+
+        let worker0_graph = build_csr_graph(3, vec![(0, 1), (0, 2), (2, 0), (2, 1)]);
+        let worker1_graph = build_csr_graph(3, vec![(1, 0), (1, 2)]);
+        let worker0_labels = vec![(0, 100)];
+        let worker1_labels = Vec::new();
+
+        let handle0 = actors.remove(&0).unwrap().get_actor_handle();
+        let handle1 = actors.remove(&1).unwrap().get_actor_handle();
+
+        let params0 = params.clone();
+        let params1 = params.clone();
+        let thread0 = thread::spawn(move || {
+            run_label_propagation_core(
+                &params0,
+                &handle0,
+                worker0_graph,
+                worker0_labels,
+                vec![timestamp("worker_start")],
+            )
+        });
+        let thread1 = thread::spawn(move || {
+            run_label_propagation_core(
+                &params1,
+                &handle1,
+                worker1_graph,
+                worker1_labels,
+                vec![timestamp("worker_start")],
+            )
+        });
+
+        let (_timestamps0, labels0, iterations0) = thread0.join().unwrap();
+        let (_timestamps1, labels1, iterations1) = thread1.join().unwrap();
+
+        assert_eq!(iterations0, 2);
+        assert_eq!(iterations1, 2);
+        assert_eq!(labels0, vec![100, 100, 100]);
+        assert_eq!(labels1, vec![100, 100, 100]);
     }
 
     #[test]
@@ -796,9 +1034,9 @@ mod tests {
             (2, 0, None),
             (2, 1, None),
         ];
-        
+
         let result = run_lp_local(edges, 3, 10);
-        
+
         assert_eq!(result[0], 100);
         assert_eq!(result[1], 100);
         assert_eq!(result[2], 100);
@@ -816,9 +1054,9 @@ mod tests {
             (3, 0, None),
             (4, 0, None),
         ];
-        
+
         let result = run_lp_local(edges, 5, 10);
-        
+
         assert_eq!(result[0], 42);
         assert_eq!(result[1], 42);
         assert_eq!(result[2], 42);
@@ -836,9 +1074,9 @@ mod tests {
             (2, 0, None),
             (2, 1, None),
         ];
-        
+
         let result = run_lp_local(edges, 3, 10);
-        
+
         // Todos deben converger a 0 (la etiqueta más pequeña)
         assert_eq!(result[0], 0);
         assert_eq!(result[1], 0);
@@ -855,10 +1093,10 @@ mod tests {
             (2, 0, None),
             (2, 1, None),
         ];
-        
+
         let result1 = run_lp_local(edges.clone(), 3, 10);
         let result2 = run_lp_local(edges, 3, 10);
-        
+
         assert_eq!(result1, result2);
     }
 
@@ -870,9 +1108,9 @@ mod tests {
             (2, 0, None),
             (2, 1, None),
         ];
-        
+
         let result = run_lp_local(edges, 3, 5);
-        
+
         assert_eq!(result[0], 50);
         assert_eq!(result[1], 30);
         // Nodo 2 tiene empate, debe elegir la más pequeña

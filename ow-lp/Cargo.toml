@@ -6,7 +6,7 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-burst-communication-middleware = { path = "../burst-communication-middleware", features = ["redis"] }
+burst-communication-middleware = { path = "../burst-communication-middleware", features = ["redis", "s3"] }
 log = "0.4.20"
 env_logger = "0.9.3"
 tokio = { version = "1.45.0", features = ["full"] }
@@ -27,6 +27,7 @@ clap = { version = "=4.5.4", features = ["derive"] }
 clap_lex = "=1.0.0"
 
 [dev-dependencies]
+async-trait = "0.1"
 proptest = "1.4"
 criterion = "0.5"
 dhat = "0.3"
@@ -36,5 +37,5 @@ name = "actions"
 path = "src/lib.rs"
 
 [[bin]]
-name = "testing"
-path = "src/testing.rs"
+name = "harness"
+path = "src/harness.rs"
