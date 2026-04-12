@@ -145,6 +145,8 @@ val distinctLabels = labels
   .distinct()
   .count()
 
+val computeEndNs = System.nanoTime()
+
 if (persistOutput) {
   labels
     .map { case (id, state) =>
@@ -157,11 +159,14 @@ if (persistOutput) {
 val execEndNs = System.nanoTime()
 
 val loadTimeMs = (loadEndNs - loadStartNs) / 1000000L
+val computeOnlyMs = (computeEndNs - execStartNs) / 1000000L
+val outputWriteMs = (execEndNs - computeEndNs) / 1000000L
 val executionTimeMs = (execEndNs - execStartNs) / 1000000L
 val totalTimeMs = (execEndNs - totalStartNs) / 1000000L
+val endToEndMs = totalTimeMs
 
 println(
-  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","max_iter":$maxIter,"supervised":$supervised,"load_time_ms":$loadTimeMs,"execution_time_ms":$executionTimeMs,"total_time_ms":$totalTimeMs,"iterations":$iterations,"converged":${!changed},"labeled_nodes":$labeledNodes,"distinct_labels":$distinctLabels}"""
+  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","max_iter":$maxIter,"supervised":$supervised,"load_time_ms":$loadTimeMs,"compute_only_ms":$computeOnlyMs,"output_write_ms":$outputWriteMs,"execution_time_ms":$executionTimeMs,"end_to_end_ms":$endToEndMs,"total_time_ms":$totalTimeMs,"iterations":$iterations,"converged":${!changed},"labeled_nodes":$labeledNodes,"distinct_labels":$distinctLabels}"""
 )
 
 System.exit(0)

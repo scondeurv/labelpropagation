@@ -102,6 +102,8 @@ val reachable = distances.filter { case (_, d) => d != inf }.cache()
 val reachableCount = reachable.count()
 val maxDistance = if (reachableCount > 0) reachable.map(_._2).max() else 0.0
 
+val computeEndNs = System.nanoTime()
+
 if (persistOutput) {
   persistLinesFromDriver(
     outputPath,
@@ -118,11 +120,14 @@ if (persistOutput) {
 val execEndNs = System.nanoTime()
 
 val loadTimeMs = (loadEndNs - loadStartNs) / 1000000L
+val computeOnlyMs = (computeEndNs - execStartNs) / 1000000L
+val outputWriteMs = (execEndNs - computeEndNs) / 1000000L
 val executionTimeMs = (execEndNs - execStartNs) / 1000000L
 val totalTimeMs = (execEndNs - totalStartNs) / 1000000L
+val endToEndMs = totalTimeMs
 
 println(
-  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","source_node":$sourceNode,"max_iter":$maxIter,"load_time_ms":$loadTimeMs,"execution_time_ms":$executionTimeMs,"total_time_ms":$totalTimeMs,"reachable_nodes":$reachableCount,"max_distance":$maxDistance}"""
+  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","source_node":$sourceNode,"max_iter":$maxIter,"load_time_ms":$loadTimeMs,"compute_only_ms":$computeOnlyMs,"output_write_ms":$outputWriteMs,"execution_time_ms":$executionTimeMs,"end_to_end_ms":$endToEndMs,"total_time_ms":$totalTimeMs,"reachable_nodes":$reachableCount,"max_distance":$maxDistance}"""
 )
 
 System.exit(0)

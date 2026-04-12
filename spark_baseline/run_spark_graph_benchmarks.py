@@ -21,6 +21,8 @@ DATA_DIR = HERE / "data"
 RESULTS_DIR = HERE / "results"
 RESULT_PREFIX = "SPARK_BENCHMARK_RESULT_JSON:"
 UNVISITED = 2**32 - 1
+LP_UNKNOWN = 2**32 - 1
+
 @dataclass(frozen=True)
 class SparkAlgorithm:
     slug: str
@@ -228,8 +230,9 @@ def load_spark_labels(output_dir: Path) -> dict[int, int]:
                     continue
                 node_text, label_text = line.split("\t", 1)
                 if label_text == "UNKNOWN":
-                    continue
-                labels[int(node_text)] = int(label_text)
+                    labels[int(node_text)] = LP_UNKNOWN
+                else:
+                    labels[int(node_text)] = int(label_text)
     return labels
 
 
@@ -488,10 +491,13 @@ def benchmark_point(
     dataset_path = DATA_DIR / algorithm.dataset_name_fn(size)
     container_input = f"/opt/tfm-spark/data/{dataset_path.name}"
     load_runs: list[float] = []
+    compute_runs: list[float] = []
     exec_runs: list[float] = []
+    write_runs: list[float] = []
     total_runs: list[float] = []
     last_payload: dict[str, Any] | None = None
-    validation_summary: dict[str, Any] | None = None
+    validation_runs: list[dict[str, Any]] = []
+    run_records: list[dict[str, Any]] = []
 
     for run_idx in range(runs):
         output_path = f"/opt/tfm-spark/results/{algorithm.slug}_{size}_run{run_idx + 1}"
@@ -502,10 +508,7 @@ def benchmark_point(
         env = os.environ.copy()
         for key, value in algorithm.configuration.get("spark_env", {}).items():
             env[key] = str(value)
-        if algorithm.slug in {"bfs", "sssp", "labelpropagation", "wcc"} and run_idx == 0:
-            env["SPARK_PERSIST_OUTPUT"] = "true"
-        else:
-            env["SPARK_PERSIST_OUTPUT"] = "false"
+        env["SPARK_PERSIST_OUTPUT"] = "true"
         completed = subprocess.run(
             command,
             cwd=HERE,
@@ -520,71 +523,111 @@ def benchmark_point(
             )
         payload = parse_result(completed.stdout)
         load_runs.append(float(payload["load_time_ms"]))
+        compute_runs.append(float(payload.get("compute_only_ms", payload["execution_time_ms"])))
         exec_runs.append(float(payload["execution_time_ms"]))
-        total_runs.append(float(payload["total_time_ms"]))
+        write_runs.append(float(payload.get("output_write_ms", 0.0)))
+        total_runs.append(float(payload.get("end_to_end_ms", payload["total_time_ms"])))
         last_payload = payload
 
-        if run_idx == 0:
-            if algorithm.slug == "labelpropagation":
-                validation_summary = validate_lp_spark_output(
-                    dataset_path,
-                    size,
-                    int(algorithm.configuration["max_iter"]),
-                    host_output_dir,
-                )
-            elif algorithm.slug == "bfs":
-                validation_summary = validate_bfs_spark_output(
-                    dataset_path,
-                    size,
-                    int(algorithm.configuration["source_node"]),
-                    int(algorithm.configuration["max_levels"]),
-                    host_output_dir,
-                )
-            elif algorithm.slug == "sssp":
-                validation_summary = validate_sssp_spark_output(
-                    dataset_path,
-                    size,
-                    int(algorithm.configuration["source_node"]),
-                    host_output_dir,
-                )
-            elif algorithm.slug == "wcc":
-                validation_summary = validate_wcc_spark_output(
-                    dataset_path,
-                    size,
-                    host_output_dir,
-                )
-            if validation_summary is not None and not validation_summary.get("passed", False):
-                raise RuntimeError(
-                    f"Spark validation failed for {algorithm.slug} at size {size}: {validation_summary}"
-                )
+        validation_summary: dict[str, Any] | None = None
+        if algorithm.slug == "labelpropagation":
+            validation_summary = validate_lp_spark_output(
+                dataset_path,
+                size,
+                int(algorithm.configuration["max_iter"]),
+                host_output_dir,
+            )
+        elif algorithm.slug == "bfs":
+            validation_summary = validate_bfs_spark_output(
+                dataset_path,
+                size,
+                int(algorithm.configuration["source_node"]),
+                int(algorithm.configuration["max_levels"]),
+                host_output_dir,
+            )
+        elif algorithm.slug == "sssp":
+            validation_summary = validate_sssp_spark_output(
+                dataset_path,
+                size,
+                int(algorithm.configuration["source_node"]),
+                host_output_dir,
+            )
+        elif algorithm.slug == "wcc":
+            validation_summary = validate_wcc_spark_output(
+                dataset_path,
+                size,
+                host_output_dir,
+            )
+        if validation_summary is not None and not validation_summary.get("passed", False):
+            raise RuntimeError(
+                f"Spark validation failed for {algorithm.slug} at size {size} run {run_idx + 1}: {validation_summary}"
+            )
+        if validation_summary is not None:
+            validation_runs.append(validation_summary)
+        run_records.append(
+            {
+                "run_index": run_idx + 1,
+                "load_time_ms": float(payload["load_time_ms"]),
+                "compute_only_ms": float(payload.get("compute_only_ms", payload["execution_time_ms"])),
+                "output_write_ms": float(payload.get("output_write_ms", 0.0)),
+                "execution_time_ms": float(payload["execution_time_ms"]),
+                "end_to_end_ms": float(payload.get("end_to_end_ms", payload["total_time_ms"])),
+                "total_time_ms": float(payload["total_time_ms"]),
+                "validation": validation_summary,
+            }
+        )
 
     load_mean, load_std = mean_std(load_runs)
+    compute_mean, compute_std = mean_std(compute_runs)
     exec_mean, exec_std = mean_std(exec_runs)
+    write_mean, write_std = mean_std(write_runs)
     total_mean, total_std = mean_std(total_runs)
     validated_load = float(load_runs[0]) if load_runs else None
+    validated_compute = float(compute_runs[0]) if compute_runs else None
     validated_exec = float(exec_runs[0]) if exec_runs else None
+    validated_write = float(write_runs[0]) if write_runs else None
     validated_total = float(total_runs[0]) if total_runs else None
     unvalidated_load_mean, unvalidated_load_std = mean_std(load_runs[1:]) if len(load_runs) > 1 else (0.0, 0.0)
+    unvalidated_compute_mean, unvalidated_compute_std = mean_std(compute_runs[1:]) if len(compute_runs) > 1 else (0.0, 0.0)
     unvalidated_exec_mean, unvalidated_exec_std = mean_std(exec_runs[1:]) if len(exec_runs) > 1 else (0.0, 0.0)
+    unvalidated_write_mean, unvalidated_write_std = mean_std(write_runs[1:]) if len(write_runs) > 1 else (0.0, 0.0)
     unvalidated_total_mean, unvalidated_total_std = mean_std(total_runs[1:]) if len(total_runs) > 1 else (0.0, 0.0)
     row = {
         algorithm.x_key: size,
         "spark_load_ms": round(load_mean, 2),
         "spark_load_std_ms": round(load_std, 2),
+        "spark_compute_only_ms": round(compute_mean, 2),
+        "spark_compute_only_std_ms": round(compute_std, 2),
         "spark_exec_ms": round(exec_mean, 2),
         "spark_exec_std_ms": round(exec_std, 2),
+        "spark_output_write_ms": round(write_mean, 2),
+        "spark_output_write_std_ms": round(write_std, 2),
+        "spark_end_to_end_ms": round(total_mean, 2),
+        "spark_end_to_end_std_ms": round(total_std, 2),
         "spark_total_ms": round(total_mean, 2),
         "spark_total_std_ms": round(total_std, 2),
         "spark_load_runs_ms": [round(value, 2) for value in load_runs],
+        "spark_compute_only_runs_ms": [round(value, 2) for value in compute_runs],
         "spark_exec_runs_ms": [round(value, 2) for value in exec_runs],
+        "spark_output_write_runs_ms": [round(value, 2) for value in write_runs],
+        "spark_end_to_end_runs_ms": [round(value, 2) for value in total_runs],
         "spark_total_runs_ms": [round(value, 2) for value in total_runs],
         "spark_load_validated_run_ms": round(validated_load, 2) if validated_load is not None else None,
+        "spark_compute_only_validated_run_ms": round(validated_compute, 2) if validated_compute is not None else None,
         "spark_exec_validated_run_ms": round(validated_exec, 2) if validated_exec is not None else None,
+        "spark_output_write_validated_run_ms": round(validated_write, 2) if validated_write is not None else None,
+        "spark_end_to_end_validated_run_ms": round(validated_total, 2) if validated_total is not None else None,
         "spark_total_validated_run_ms": round(validated_total, 2) if validated_total is not None else None,
         "spark_load_avg_unvalidated_ms": round(unvalidated_load_mean, 2) if len(load_runs) > 1 else None,
         "spark_load_std_unvalidated_ms": round(unvalidated_load_std, 2) if len(load_runs) > 1 else None,
+        "spark_compute_only_avg_unvalidated_ms": round(unvalidated_compute_mean, 2) if len(compute_runs) > 1 else None,
+        "spark_compute_only_std_unvalidated_ms": round(unvalidated_compute_std, 2) if len(compute_runs) > 1 else None,
         "spark_exec_avg_unvalidated_ms": round(unvalidated_exec_mean, 2) if len(exec_runs) > 1 else None,
         "spark_exec_std_unvalidated_ms": round(unvalidated_exec_std, 2) if len(exec_runs) > 1 else None,
+        "spark_output_write_avg_unvalidated_ms": round(unvalidated_write_mean, 2) if len(write_runs) > 1 else None,
+        "spark_output_write_std_unvalidated_ms": round(unvalidated_write_std, 2) if len(write_runs) > 1 else None,
+        "spark_end_to_end_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
+        "spark_end_to_end_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
         "spark_total_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
         "spark_total_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
     }
@@ -592,8 +635,13 @@ def benchmark_point(
         for key in ("visited_nodes", "max_level", "reachable_nodes", "max_distance", "iterations", "converged", "labeled_nodes", "distinct_labels", "num_components", "component_hash"):
             if key in last_payload:
                 row[key] = last_payload[key]
-    if validation_summary is not None:
-        row["validation"] = validation_summary
+    if validation_runs:
+        row["validation"] = {
+            "performed": True,
+            "passed": all(bool(run.get("passed", False)) for run in validation_runs),
+            "runs": validation_runs,
+        }
+    row["run_records"] = run_records
     return row
 
 

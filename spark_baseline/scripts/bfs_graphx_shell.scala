@@ -96,6 +96,8 @@ val reachable = levels.filter { case (_, level) => level != inf }.cache()
 val visitedNodes = reachable.count()
 val maxLevel = if (visitedNodes > 0) reachable.map(_._2).max() else 0
 
+val computeEndNs = System.nanoTime()
+
 if (persistOutput) {
   persistLinesFromDriver(
     outputPath,
@@ -112,11 +114,14 @@ if (persistOutput) {
 val execEndNs = System.nanoTime()
 
 val loadTimeMs = (loadEndNs - loadStartNs) / 1000000L
+val computeOnlyMs = (computeEndNs - execStartNs) / 1000000L
+val outputWriteMs = (execEndNs - computeEndNs) / 1000000L
 val executionTimeMs = (execEndNs - execStartNs) / 1000000L
 val totalTimeMs = (execEndNs - totalStartNs) / 1000000L
+val endToEndMs = totalTimeMs
 
 println(
-  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","source_node":$sourceNode,"max_levels":$maxLevels,"load_time_ms":$loadTimeMs,"execution_time_ms":$executionTimeMs,"total_time_ms":$totalTimeMs,"visited_nodes":$visitedNodes,"max_level":$maxLevel}"""
+  s"""$resultPrefix{"graph_file":"${jsonEscape(inputPath)}","source_node":$sourceNode,"max_levels":$maxLevels,"load_time_ms":$loadTimeMs,"compute_only_ms":$computeOnlyMs,"output_write_ms":$outputWriteMs,"execution_time_ms":$executionTimeMs,"end_to_end_ms":$endToEndMs,"total_time_ms":$totalTimeMs,"visited_nodes":$visitedNodes,"max_level":$maxLevel}"""
 )
 
 System.exit(0)
