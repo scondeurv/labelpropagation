@@ -6,7 +6,7 @@ edition = "2021"
 resolver = "2"
 
 [dependencies]
-burst-communication-middleware = { path = "../burst-communication-middleware", features = ["redis", "s3"] }
+burst-communication-middleware = { path = "../burst-communication-middleware", features = ["redis", "rabbitmq", "s3"] }
 log = "0.4.20"
 env_logger = "0.9.3"
 tokio = { version = "1.45.0", features = ["full"] }

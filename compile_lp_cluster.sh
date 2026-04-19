@@ -44,9 +44,10 @@ docker run --rm --entrypoint="" \
         cp -r /tmp/input_actions /tmp/actions_src
         cp -r /tmp/input_middleware /tmp/middleware_src
 
-        # 2. Keep the image's internal middleware, mirroring the stable SSSP path.
-        # This avoids baking LP against a local middleware tree that may diverge
-        # from what the runtime image expects at execution time.
+        # 2. Replace the image middleware with the local tree so LP is built
+        # against the same backend code we are debugging and shipping.
+        rm -rf /usr/src/burst-communication-middleware
+        mv /tmp/middleware_src /usr/src/burst-communication-middleware
 
         # 3. Compile using the image's internal script
         python3 /usr/bin/compile.py main /tmp/actions_src /tmp

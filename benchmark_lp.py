@@ -46,10 +46,10 @@ def delete_burst_output(bucket, key, endpoint):
         print(f"Warning: could not delete previous burst output {output_key}: {exc}", file=sys.stderr)
 
 
-def clean_burst_cluster():
+def clean_burst_cluster(namespace="openwhisk", release_name="owdev"):
     """Delete stale guest/prewarm OpenWhisk pods before a Burst run."""
     result = subprocess.run(
-        ["bash", str(CLEAN_BURST_CLUSTER_SCRIPT)],
+        ["bash", str(CLEAN_BURST_CLUSTER_SCRIPT), namespace, release_name],
         capture_output=True,
         text=True,
         cwd=ROOT,
@@ -128,9 +128,9 @@ def ensure_input_data(num_nodes, partitions, bucket, endpoint, key_prefix, graph
 
 def benchmark_standalone(graph_file, num_nodes, max_iter):
     """Run standalone Label Propagation and return the full output dict."""
-    binary_path = "lpst/target/release/label-propagation"
+    binary_path = HERE / "lpst" / "target" / "release" / "label-propagation"
     
-    if not os.path.exists(binary_path):
+    if not binary_path.exists():
         print(f"Error: Binary not found at {binary_path}", file=sys.stderr)
         print("Run: cd lpst && cargo build --release", file=sys.stderr)
         return None
@@ -141,10 +141,11 @@ def benchmark_standalone(graph_file, num_nodes, max_iter):
     
     try:
         result = subprocess.run(
-            [binary_path, graph_file, str(num_nodes), str(max_iter)],
+            [str(binary_path), graph_file, str(num_nodes), str(max_iter)],
             capture_output=True,
             text=True,
-            timeout=600
+            timeout=600,
+            cwd=HERE,
         )
         
         if result.returncode != 0:
@@ -225,6 +226,7 @@ def benchmark_burst(
     key_prefix="graphs",
     backend="redis-list",
     chunk_size=1024,
+    ow_protocol="https",
 ):
     """Run burst Label Propagation and return (host_total_ms, warm_total_ms, span_ms)."""
     s3_prefix = f"{key_prefix}/large-{num_nodes}"
@@ -240,14 +242,14 @@ def benchmark_burst(
         granularity=granularity
     )
     
-    executor = OpenwhiskExecutor(ow_host, ow_port, debug=True)
+    executor = OpenwhiskExecutor(ow_host, ow_port, debug=True, protocol=ow_protocol)
     
     try:
         host_submit = get_millis()
         dt = executor.burst(
             "labelpropagation",
             params,
-            file="./labelpropagation.zip",
+            file=str(HERE / "labelpropagation.zip"),
             memory=memory_mb,
             custom_image="burstcomputing/runtime-rust-burst:latest",
             debug_mode=True,
@@ -410,6 +412,9 @@ if __name__ == "__main__":
     parser.add_argument("--memory", type=int, default=512, help="Memory per worker (MB)")
     parser.add_argument("--ow-host", type=str, default="localhost", help="OpenWhisk host")
     parser.add_argument("--ow-port", type=int, default=31001, help="OpenWhisk port")
+    parser.add_argument("--ow-protocol", type=str, default=os.environ.get("OW_PROTOCOL", "https"), choices=["http", "https"], help="OpenWhisk protocol")
+    parser.add_argument("--ow-k8s-namespace", type=str, default=os.environ.get("OPENWHISK_K8S_NAMESPACE", "openwhisk"), help="Kubernetes namespace that hosts the OpenWhisk release")
+    parser.add_argument("--ow-release-name", type=str, default=os.environ.get("OPENWHISK_RELEASE_NAME", "owdev"), help="Helm release name of the OpenWhisk deployment")
     parser.add_argument("--skip-standalone", action="store_true", help="Skip standalone benchmark")
     parser.add_argument("--skip-burst", action="store_true", help="Skip burst benchmark")
     parser.add_argument("--backend", default="redis-list", help="Burst communication backend")
@@ -422,7 +427,7 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    graph_file = f"large_{args.nodes}.txt"
+    graph_file = str(HERE / f"large_{args.nodes}.txt")
     ensure_input_data(
         num_nodes=args.nodes,
         partitions=args.partitions,
@@ -454,7 +459,7 @@ if __name__ == "__main__":
     validation_skipped_reason = None
     if not args.skip_burst:
         burst_key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-        clean_burst_cluster()
+        clean_burst_cluster(args.ow_k8s_namespace, args.ow_release_name)
         delete_burst_output(args.bucket, burst_key_prefix, args.validation_endpoint)
         print(f"Running burst version...")
         burst_host_time, burst_warm_time, algo_time, phase_metrics = benchmark_burst(
@@ -470,6 +475,7 @@ if __name__ == "__main__":
             args.key_prefix,
             args.backend,
             args.chunk_size,
+            args.ow_protocol,
         )
         if burst_host_time is not None:
             print(f"Burst Time (Host Total / Cold): {burst_host_time} ms")

@@ -12,6 +12,7 @@ Supports two graph models:
 """
 import argparse
 import io
+import os
 import numpy as np
 import boto3
 from botocore.client import Config
@@ -117,6 +118,16 @@ if __name__ == "__main__":
     parser.add_argument("--bucket", type=str, default="test-bucket", help="S3 bucket")
     parser.add_argument("--prefix", type=str, default=None, help="S3 key prefix")
     parser.add_argument("--endpoint", type=str, default="localhost:9000", help="S3 endpoint")
+    parser.add_argument(
+        "--aws-access-key-id",
+        default=None,
+        help="S3 access key id (defaults to AWS_ACCESS_KEY_ID or minioadmin)",
+    )
+    parser.add_argument(
+        "--aws-secret-access-key",
+        default=None,
+        help="S3 secret access key (defaults to AWS_SECRET_ACCESS_KEY or minioadmin)",
+    )
     parser.add_argument("--no-s3", action="store_true", help="Skip S3 upload")
     parser.add_argument("--density", type=int, default=10, help="Edges per node (default: 10)")
     parser.add_argument("--seed", type=int, default=42, help="RNG seed (random model only)")
@@ -130,6 +141,9 @@ if __name__ == "__main__":
     if args.prefix is None:
         args.prefix = f"graphs/large-{args.nodes}"
 
+    access_key = args.aws_access_key_id or os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
+    secret_key = args.aws_secret_access_key or os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
+
     kwargs = dict(
         num_nodes=args.nodes,
         num_partitions=args.partitions,
@@ -137,6 +151,8 @@ if __name__ == "__main__":
         bucket=None if args.no_s3 else args.bucket,
         s3_prefix=None if args.no_s3 else args.prefix,
         endpoint=args.endpoint,
+        access_key=access_key,
+        secret_key=secret_key,
         density=args.density,
     )
 

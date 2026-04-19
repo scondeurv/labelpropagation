@@ -166,7 +166,7 @@ def run_probe(args: argparse.Namespace) -> dict:
             f"Missing {ZIP_PATH}. Compile the probe first with ./compile_runtime_probe_cluster.sh"
         )
 
-    executor = OpenwhiskExecutor(args.ow_host, args.ow_port, debug=True)
+    executor = OpenwhiskExecutor(args.ow_host, args.ow_port, debug=True, protocol=args.ow_protocol)
     payloads = probe_payloads(
         mode=args.mode,
         workers=args.workers,
@@ -251,6 +251,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--aws-session-token", default=os.environ.get("AWS_SESSION_TOKEN"))
     parser.add_argument("--ow-host", default=os.environ.get("OW_HOST", "localhost"))
     parser.add_argument("--ow-port", type=int, default=int(os.environ.get("OW_PORT", "31001")))
+    parser.add_argument("--ow-protocol", default=os.environ.get("OW_PROTOCOL", "https"), choices=("http", "https"))
     return parser.parse_args()
 
 

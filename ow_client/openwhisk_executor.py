@@ -17,8 +17,8 @@ AUTH_TOKEN = "MjNiYzQ2YjEtNzFmNi00ZWQ1LThjNTQtODE2YWE0ZjhjNTAyOjEyM3pPM3haQ0xyTU
 
 
 class OpenwhiskExecutor:
-    def __init__(self, host, port, debug=False):
-        self.protocol = 'https'
+    def __init__(self, host, port, debug=False, protocol="https"):
+        self.protocol = protocol
         self.host = host
         self.port = port
         self.session = requests.Session()

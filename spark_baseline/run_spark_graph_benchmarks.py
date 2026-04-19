@@ -116,6 +116,31 @@ def mean_std(values: list[float]) -> tuple[float, float]:
     return float(statistics.mean(values)), float(statistics.pstdev(values))
 
 
+def build_spark_phase_metrics(payload: dict[str, Any]) -> dict[str, Any]:
+    load_ms = float(payload.get("load_time_ms", 0.0))
+    compute_ms = float(payload.get("compute_only_ms", payload["execution_time_ms"]))
+    write_ms = float(payload.get("output_write_ms", 0.0))
+    end_to_end_ms = float(payload.get("end_to_end_ms", payload["total_time_ms"]))
+    warm_total_ms = load_ms + compute_ms + write_ms
+    cold_start_ms = max(0.0, end_to_end_ms - warm_total_ms)
+    return {
+        "workers": None,
+        "cold_start_ms": cold_start_ms,
+        "stagger_ms": 0.0,
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
+        "reduce_ms": 0.0,
+        "broadcast_ms": 0.0,
+        "communication_ms": 0.0,
+        "warm_total_ms": warm_total_ms,
+        "host_total_ms": end_to_end_ms,
+        "span_ms": compute_ms,
+        "write_ms": write_ms,
+        "iterations": None,
+        "per_iteration": [],
+    }
+
+
 def ensure_dirs() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -213,6 +238,22 @@ def run_wcc_standalone(graph_file: Path, num_nodes: int) -> dict[str, Any]:
         raise RuntimeError(f"standalone WCC binary not found in {candidates}")
     completed = run_command(
         [str(binary_path), str(graph_file), str(num_nodes)],
+        cwd=binary_path.parent.parent.parent,
+    )
+    return json.loads(completed.stdout.strip())
+
+
+def run_louvain_standalone(
+    graph_file: Path,
+    num_nodes: int,
+    max_passes: int,
+    min_gain: float,
+) -> dict[str, Any]:
+    binary_path = ROOT / "louvain/louvain-standalone/target/release/louvain-standalone"
+    if not binary_path.exists():
+        raise RuntimeError(f"standalone Louvain binary not found at {binary_path}")
+    completed = run_command(
+        [str(binary_path), str(graph_file), str(num_nodes), str(max_passes), str(min_gain)],
         cwd=binary_path.parent.parent.parent,
     )
     return json.loads(completed.stdout.strip())
@@ -465,6 +506,45 @@ def validate_lp_spark_output(
     }
 
 
+
+def validate_louvain_spark_output(
+    graph_file: Path,
+    num_nodes: int,
+    max_passes: int,
+    min_gain: float,
+    spark_output_dir: Path,
+) -> dict[str, Any]:
+    standalone_output = run_louvain_standalone(graph_file, num_nodes, max_passes, min_gain)
+    standalone_communities = standalone_output.get("communities")
+    if not isinstance(standalone_communities, list):
+        raise RuntimeError("standalone Louvain output does not contain communities")
+    spark_communities_map = load_int_vector(spark_output_dir)
+    spark_communities = [spark_communities_map[node] for node in range(num_nodes)]
+    standalone_norm = normalize_partition_labels([int(value) for value in standalone_communities])
+    spark_norm = normalize_partition_labels([int(value) for value in spark_communities])
+    mismatches = []
+    for node, (spark_value, standalone_value) in enumerate(zip(spark_norm, standalone_norm)):
+        if spark_value != standalone_value:
+            mismatches.append(
+                {"node": node, "spark": spark_value, "standalone": standalone_value}
+            )
+            if len(mismatches) >= 20:
+                break
+    standalone_hash = canonical_component_hash_from_labels([int(value) for value in standalone_communities])
+    spark_hash = canonical_component_hash_from_labels([int(value) for value in spark_communities])
+    return {
+        "performed": True,
+        "passed": len(mismatches) == 0 and standalone_hash == spark_hash,
+        "num_nodes": num_nodes,
+        "standalone_modularity": standalone_output.get("modularity"),
+        "standalone_num_communities": standalone_output.get("num_communities"),
+        "standalone_partition_hash": standalone_hash,
+        "spark_partition_hash": spark_hash,
+        "mismatches": len(mismatches),
+        "sample_mismatches": mismatches,
+    }
+
+
 def ensure_dataset(algorithm: SparkAlgorithm, size: int, force: bool) -> Path | None:
     if not algorithm.generator_repo or not algorithm.generator_script:
         return None
@@ -522,6 +602,7 @@ def benchmark_point(
                 f"{completed.returncode}: {' '.join(command)}\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}"
             )
         payload = parse_result(completed.stdout)
+        phase_metrics = build_spark_phase_metrics(payload)
         load_runs.append(float(payload["load_time_ms"]))
         compute_runs.append(float(payload.get("compute_only_ms", payload["execution_time_ms"])))
         exec_runs.append(float(payload["execution_time_ms"]))
@@ -558,6 +639,14 @@ def benchmark_point(
                 size,
                 host_output_dir,
             )
+        elif algorithm.slug == "louvain":
+            validation_summary = validate_louvain_spark_output(
+                dataset_path,
+                size,
+                int(algorithm.configuration["max_passes"]),
+                float(algorithm.configuration["min_gain"]),
+                host_output_dir,
+            )
         if validation_summary is not None and not validation_summary.get("passed", False):
             raise RuntimeError(
                 f"Spark validation failed for {algorithm.slug} at size {size} run {run_idx + 1}: {validation_summary}"
@@ -573,6 +662,7 @@ def benchmark_point(
                 "execution_time_ms": float(payload["execution_time_ms"]),
                 "end_to_end_ms": float(payload.get("end_to_end_ms", payload["total_time_ms"])),
                 "total_time_ms": float(payload["total_time_ms"]),
+                "phase_metrics": phase_metrics,
                 "validation": validation_summary,
             }
         )
@@ -630,9 +720,10 @@ def benchmark_point(
         "spark_end_to_end_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
         "spark_total_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
         "spark_total_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
+        "phase_metrics": build_spark_phase_metrics(last_payload) if last_payload else None,
     }
     if last_payload:
-        for key in ("visited_nodes", "max_level", "reachable_nodes", "max_distance", "iterations", "converged", "labeled_nodes", "distinct_labels", "num_components", "component_hash"):
+        for key in ("visited_nodes", "max_level", "reachable_nodes", "max_distance", "iterations", "converged", "labeled_nodes", "distinct_labels", "num_components", "component_hash", "modularity", "num_communities", "num_passes"):
             if key in last_payload:
                 row[key] = last_payload[key]
     if validation_runs:
@@ -755,6 +846,7 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                     "SPARK_TOTAL_EXECUTOR_CORES": "4",
                     "SPARK_EXECUTOR_CORES": "1",
                     "SPARK_EXECUTOR_MEMORY": "4g",
+                    "SPARK_DRIVER_MEMORY": "8g",
                     "SPARK_DEFAULT_PARALLELISM": "4",
                     "SPARK_SHUFFLE_PARTITIONS": "4",
                 },
@@ -808,7 +900,8 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
             generator_args_fn=lambda size, dataset: [
                 "--nodes", str(size),
                 "--partitions", "4",
-                "--density", "20",
+                "--density", "10",
+                "--model", "random",
                 "--output", str(dataset),
                 "--no-s3",
             ],
@@ -816,13 +909,13 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
             submit_args_fn=lambda container_input, output_path, _size: [
                 container_input,
                 output_path,
-                "10",
+                "50",
                 "4",
             ],
             configuration={
                 "partitions": 4,
-                "max_iter": 10,
-                "density": 20,
+                "max_iter": 50,
+                "density": 10,
                 "experimental_note": (
                     "La baseline Spark para Label Propagation se truncó en 2M nodos "
                     "porque a partir de 3M el coste por repetición superó el presupuesto "
@@ -841,20 +934,43 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
         "louvain": SparkAlgorithm(
             slug="louvain",
             x_key="nodes",
-            points=[],
-            generator_repo=None,
-            generator_script=None,
-            dataset_name_fn=lambda size: "",
-            generator_args_fn=lambda size, dataset: [],
-            submit_script=None,
-            submit_args_fn=lambda container_input, output_path, size: [],
-            configuration={},
-            supported=False,
-            unsupported_reason=(
-                "No se ha integrado una implementacion Louvain en Spark que sea semantica y "
-                "metodologicamente equivalente a la usada en standalone/burst; el ciclo Spark "
-                "la registra como no disponible para evitar una comparacion injusta."
-            ),
+            points=[100_000, 500_000, 1_000_000, 2_000_000],
+            generator_repo="louvain",
+            generator_script="setup_large_louvain_data.py",
+            dataset_name_fn=lambda size: f"large_louvain_{size}.txt",
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", "4",
+                "--output", str(dataset),
+                "--no-s3",
+                "--mode", "planted",
+                "--communities", "10",
+                "--p-in", str(min(8.0 / max((size // 10) - 1, 1), 0.05)),
+                "--p-out", str(min(2.0 / max(size - (size // 10), 1), 0.001)),
+            ],
+            submit_script="submit-louvain.sh",
+            submit_args_fn=lambda container_input, output_path, size: [
+                container_input,
+                output_path,
+                str(size),
+                "20",
+                "0.000001",
+                "4",
+            ],
+            configuration={
+                "partitions": 4,
+                "max_passes": 20,
+                "min_gain": 1e-6,
+                "communities": 10,
+                "generator_mode": "planted_sparse",
+                "spark_env": {
+                    "SPARK_TOTAL_EXECUTOR_CORES": "4",
+                    "SPARK_EXECUTOR_CORES": "1",
+                    "SPARK_EXECUTOR_MEMORY": "4g",
+                    "SPARK_DEFAULT_PARALLELISM": "4",
+                    "SPARK_SHUFFLE_PARTITIONS": "4",
+                },
+            },
         ),
     }
 
@@ -882,6 +998,7 @@ def with_resource_overrides(
     spark_env["SPARK_TOTAL_EXECUTOR_CORES"] = str(executors)
     spark_env["SPARK_EXECUTOR_CORES"] = "1"
     spark_env["SPARK_EXECUTOR_MEMORY"] = executor_memory
+    spark_env.setdefault("SPARK_DRIVER_MEMORY", "8g" if algorithm.slug == "louvain" else executor_memory)
     spark_env["SPARK_DEFAULT_PARALLELISM"] = str(partitions)
     spark_env["SPARK_SHUFFLE_PARTITIONS"] = str(partitions)
 
@@ -935,14 +1052,15 @@ def with_resource_overrides(
             generator_args_fn=lambda size, dataset: [
                 "--nodes", str(size),
                 "--partitions", str(partitions),
-                "--density", "20",
+                "--density", "10",
+                "--model", "random",
                 "--output", str(dataset),
                 "--no-s3",
             ],
             submit_args_fn=lambda container_input, output_path, _size: [
                 container_input,
                 output_path,
-                "10",
+                "50",
                 str(partitions),
             ],
             configuration=config,
@@ -964,6 +1082,31 @@ def with_resource_overrides(
             submit_args_fn=lambda container_input, output_path, _size: [
                 container_input,
                 output_path,
+                str(partitions),
+            ],
+            configuration=config,
+        )
+
+    if algorithm.slug == "louvain":
+        return replace(
+            algorithm,
+            points=points or algorithm.points,
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", str(partitions),
+                "--output", str(dataset),
+                "--no-s3",
+                "--mode", "planted",
+                "--communities", "10",
+                "--p-in", str(min(8.0 / max((size // 10) - 1, 1), 0.05)),
+                "--p-out", str(min(2.0 / max(size - (size // 10), 1), 0.001)),
+            ],
+            submit_args_fn=lambda container_input, output_path, size: [
+                container_input,
+                output_path,
+                str(size),
+                str(config["max_passes"]),
+                str(config["min_gain"]),
                 str(partitions),
             ],
             configuration=config,
