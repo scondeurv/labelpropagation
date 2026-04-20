@@ -56,7 +56,8 @@ class OpenwhiskExecutor:
         for index, activation_id in enumerate(activation_ids):
             dataset.add_invocation(index, activation_id, time.time(), is_burst=True)
         fetch_count = 0
-        self.__wait_for_completion(dataset)
+        wait_timeout_s = max(60, int(timeout / 1000) + 60)
+        self.__wait_for_completion(dataset, wait_timeout_s=wait_timeout_s)
         return dataset
 
     def map(self, action_name, params_list, file, is_zip=False, memory=256, custom_image=None, timeout=60000) -> ResultDataset:
@@ -76,7 +77,8 @@ class OpenwhiskExecutor:
         for index, input in enumerate(params_list):
             activation_id = self.__invoke_single_action(action_name, input)
             dataset.add_invocation(index, activation_id, time.time(), is_burst=False)
-        self.__wait_for_completion(dataset)
+        wait_timeout_s = max(60, int(timeout / 1000) + 60)
+        self.__wait_for_completion(dataset, wait_timeout_s=wait_timeout_s)
         return dataset
 
     def __create_action(self, action_name, file, is_zip, memory, custom_image, timeout=60000):
@@ -151,8 +153,11 @@ class OpenwhiskExecutor:
             logger.debug(f"Function {activation_id} not finished: {response.text}")
             return None
 
-    def __wait_for_completion(self, dataset):
+    def __wait_for_completion(self, dataset, wait_timeout_s=None):
         monitor_count = 0
+        started_waiting = time.monotonic()
+        last_progress_at = started_waiting
+        completed_count = 0
         while any("result" not in item for item in dataset.results):
             missing_results = [item for item in dataset.results if "result" not in item]
             for item in missing_results:
@@ -161,8 +166,20 @@ class OpenwhiskExecutor:
                     logger.info(f"[{item['activationId']} finished]: {result['response']['result']}")
                     dataset.add_result(item["activationId"], result["start"], result["end"],
                                        result["response"]["result"])
+            new_completed_count = sum(1 for item in dataset.results if "result" in item)
+            if new_completed_count > completed_count:
+                completed_count = new_completed_count
+                last_progress_at = time.monotonic()
             monitor_count += 1
             logger.debug(f"Monitor count: {monitor_count}")
+            if wait_timeout_s is not None and (time.monotonic() - started_waiting) >= wait_timeout_s:
+                pending_ids = [item["activationId"] for item in dataset.results if "result" not in item]
+                elapsed_s = round(time.monotonic() - started_waiting, 2)
+                stalled_s = round(time.monotonic() - last_progress_at, 2)
+                raise TimeoutError(
+                    f"timed out waiting for OpenWhisk activations after {elapsed_s}s "
+                    f"(last progress {stalled_s}s ago); pending activationIds={pending_ids}"
+                )
             time.sleep(self.__monitor_interval)
         return dataset
 

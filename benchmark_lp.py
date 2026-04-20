@@ -406,6 +406,7 @@ def build_benchmark_summary(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Benchmark LP: Standalone vs Burst")
     parser.add_argument("--nodes", type=int, required=True, help="Number of nodes")
+    parser.add_argument("--graph-file", type=str, default=None, help="Override local graph file path")
     parser.add_argument("--partitions", type=int, default=8, help="Number of partitions for burst")
     parser.add_argument("--granularity", type=int, default=1, help="Granularity for burst")
     parser.add_argument("--iter", type=int, default=10, help="Max iterations")
@@ -420,6 +421,8 @@ if __name__ == "__main__":
     parser.add_argument("--backend", default="redis-list", help="Burst communication backend")
     parser.add_argument("--chunk-size", type=int, default=1024, help="Burst middleware chunk size in KB")
     parser.add_argument("--validate", action="store_true", help="Validate burst results against standalone")
+    parser.add_argument("--skip-input-ensure", action="store_true", help="Skip local/S3 input dataset preparation checks")
+    parser.add_argument("--skip-output-delete", action="store_true", help="Skip deleting previous Burst output object before execution")
     parser.add_argument("--s3-endpoint", default=DEFAULT_WORKER_S3_ENDPOINT, help="S3 endpoint for workers inside cluster")
     parser.add_argument("--validation-endpoint", default=DEFAULT_HOST_S3_ENDPOINT, help="S3 endpoint for local validation script")
     parser.add_argument("--bucket", default="test-bucket", help="S3 bucket name")
@@ -427,15 +430,16 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    graph_file = str(HERE / f"large_{args.nodes}.txt")
-    ensure_input_data(
-        num_nodes=args.nodes,
-        partitions=args.partitions,
-        bucket=args.bucket,
-        endpoint=args.validation_endpoint,
-        key_prefix=args.key_prefix,
-        graph_file=graph_file,
-    )
+    graph_file = args.graph_file or str(HERE / f"large_{args.nodes}.txt")
+    if not args.skip_input_ensure:
+        ensure_input_data(
+            num_nodes=args.nodes,
+            partitions=args.partitions,
+            bucket=args.bucket,
+            endpoint=args.validation_endpoint,
+            key_prefix=args.key_prefix,
+            graph_file=graph_file,
+        )
     
     # Benchmark standalone
     standalone_output = None
@@ -460,7 +464,8 @@ if __name__ == "__main__":
     if not args.skip_burst:
         burst_key_prefix = f"{args.key_prefix}/large-{args.nodes}"
         clean_burst_cluster(args.ow_k8s_namespace, args.ow_release_name)
-        delete_burst_output(args.bucket, burst_key_prefix, args.validation_endpoint)
+        if not args.skip_output_delete:
+            delete_burst_output(args.bucket, burst_key_prefix, args.validation_endpoint)
         print(f"Running burst version...")
         burst_host_time, burst_warm_time, algo_time, phase_metrics = benchmark_burst(
             args.nodes, 

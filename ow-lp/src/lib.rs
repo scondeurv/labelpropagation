@@ -151,6 +151,29 @@ impl From<LabelsMessage> for Bytes {
     }
 }
 
+fn encode_seed_pairs(seed_pairs: &[(u32, u32)]) -> LabelsMessage {
+    let mut payload = Vec::with_capacity(seed_pairs.len() * 2);
+    for &(node, label) in seed_pairs {
+        payload.push(node);
+        payload.push(label);
+    }
+    LabelsMessage(payload)
+}
+
+fn apply_seed_pairs(labels: &mut [u32], encoded_pairs: &[u32]) {
+    assert!(
+        encoded_pairs.len() % 2 == 0,
+        "seed payload must contain node/label pairs"
+    );
+    for pair in encoded_pairs.chunks_exact(2) {
+        let node = pair[0] as usize;
+        let label = pair[1];
+        if node < labels.len() {
+            labels[node] = label;
+        }
+    }
+}
+
 /// Count message for convergence (single u64)
 #[derive(Debug, Clone)]
 struct CountMessage(pub u64);
@@ -178,20 +201,12 @@ impl From<CountMessage> for Bytes {
     }
 }
 
-fn logical_worker_id(worker_id: u32, granularity: u32, group_id: Option<u32>) -> u32 {
-    group_id.unwrap_or_else(|| worker_id / granularity.max(1))
-}
-
-fn assigned_partition_range(
-    partitions: u32,
-    granularity: u32,
-    logical_worker: u32,
-) -> std::ops::Range<u32> {
-    let start = logical_worker * granularity;
-    let end = start + granularity;
+fn assigned_partition_range(partitions: u32, worker_id: u32) -> std::ops::Range<u32> {
+    let start = worker_id;
+    let end = start + 1;
     assert!(
         end <= partitions,
-        "logical worker {logical_worker} assigned partitions [{start}, {end}) outside total partitions {partitions}"
+        "worker {worker_id} assigned partitions [{start}, {end}) outside total partitions {partitions}"
     );
     start..end
 }
@@ -317,9 +332,7 @@ async fn load_partition_flat(
     s3_client: &S3Client,
     worker_id: u32,
 ) -> Result<(CSRGraph, Vec<(u32, u32)>), String> {
-    let logical_worker = logical_worker_id(worker_id, params.granularity, params.group_id);
-    let part_range =
-        assigned_partition_range(params.partitions, params.granularity, logical_worker);
+    let part_range = assigned_partition_range(params.partitions, worker_id);
     let mut fetch_futures = Vec::new();
     for p in part_range.clone() {
         let part_key = format!("{}/part-{:05}", params.input_data.key, p);
@@ -418,71 +431,40 @@ fn run_label_propagation_core(
         params.num_nodes
     );
 
-    // Seed the local labels and leave the rest as UNKNOWN for now.
-    let mut labels = vec![UNKNOWN; params.num_nodes as usize];
-    let mut initial_labels = HashMap::default();
-    for (node, label) in initial_labels_vec {
-        if (node as usize) < labels.len() {
-            labels[node as usize] = label;
-            initial_labels.insert(node, label);
-        }
-    }
-
-    let is_seed: Vec<bool> = {
-        let mut v = vec![false; params.num_nodes as usize];
-        for &node in initial_labels.keys() {
-            v[node as usize] = true;
-        }
-        v
-    };
-
-    // Check whether any worker has seed labels so we can choose the right mode.
-    let local_has_seeds_val = if !initial_labels.is_empty() { 1 } else { 0 };
-    let reduced_seeds_msg = middleware
-        .reduce(LabelsMessage(vec![local_has_seeds_val]), |mut a, b| {
-            if a.0[0] == 1 || b.0[0] == 1 {
-                a.0[0] = 1;
-            }
-            a
-        })
-        .unwrap();
-
-    let global_seeds_msg = if let Some(msg) = reduced_seeds_msg {
-        middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
-    } else {
-        middleware.broadcast(None, ROOT_WORKER).unwrap()
-    };
-    let global_has_seeds = global_seeds_msg.0[0] == 1;
-
-    // Without seeds, start in unsupervised mode using each node ID as its label.
-    if !global_has_seeds && initial_labels.is_empty() {
-        println!(
-            "[Worker {}] No initial labels found globally, using unsupervised mode",
-            worker
-        );
-        for (idx, label) in labels.iter_mut().enumerate() {
-            *label = idx as u32;
-        }
-    }
-
-    // Share the initial labels so every worker starts from the same global view.
-    let initial_msg = LabelsMessage(labels);
+    // Share only the seeded nodes so the initial collective stays small.
+    let initial_msg = encode_seed_pairs(&initial_labels_vec);
     let combined = middleware
         .reduce(initial_msg, |mut left, right| {
-            for (a, b) in left.0.iter_mut().zip(right.0.iter()) {
-                if *a == UNKNOWN {
-                    *a = *b;
-                }
-            }
+            left.0.extend(right.0);
             left
         })
         .unwrap();
 
-    let global_labels = if let Some(msg) = combined {
+    let global_seed_pairs = if let Some(msg) = combined {
         middleware.broadcast(Some(msg), ROOT_WORKER).unwrap()
     } else {
         middleware.broadcast(None, ROOT_WORKER).unwrap()
     };
+
+    let mut global_labels = LabelsMessage(vec![UNKNOWN; params.num_nodes as usize]);
+    apply_seed_pairs(&mut global_labels.0, &global_seed_pairs.0);
+    let global_has_seeds = !global_seed_pairs.0.is_empty();
+    let is_seed: Vec<bool> = if global_has_seeds {
+        global_labels.0.iter().map(|&label| label != UNKNOWN).collect()
+    } else {
+        vec![false; params.num_nodes as usize]
+    };
+
+    // Without seeds, start in unsupervised mode using each node ID as its label.
+    if !global_has_seeds {
+        println!(
+            "[Worker {}] No initial labels found globally, using unsupervised mode",
+            worker
+        );
+        for (idx, label) in global_labels.0.iter_mut().enumerate() {
+            *label = idx as u32;
+        }
+    }
 
     let max_iter = params.max_iterations.unwrap_or(MAX_ITER);
     let threshold = params.convergence_threshold.unwrap_or(0);
@@ -898,19 +880,23 @@ mod tests {
     }
 
     #[test]
-    fn partition_range_matches_grouped_layout() {
-        assert_eq!(assigned_partition_range(8, 2, 0), 0..2);
-        assert_eq!(assigned_partition_range(8, 2, 1), 2..4);
-        assert_eq!(assigned_partition_range(8, 2, 2), 4..6);
-        assert_eq!(assigned_partition_range(8, 2, 3), 6..8);
+    fn partition_range_matches_worker_id() {
+        assert_eq!(assigned_partition_range(8, 0), 0..1);
+        assert_eq!(assigned_partition_range(8, 1), 1..2);
+        assert_eq!(assigned_partition_range(8, 6), 6..7);
+        assert_eq!(assigned_partition_range(8, 7), 7..8);
     }
 
     #[test]
-    fn group_id_overrides_physical_worker_id() {
-        assert_eq!(logical_worker_id(0, 2, Some(0)), 0);
-        assert_eq!(logical_worker_id(1, 2, Some(0)), 0);
-        assert_eq!(logical_worker_id(2, 2, Some(1)), 1);
-        assert_eq!(logical_worker_id(3, 2, Some(1)), 1);
+    fn grouped_workers_keep_distinct_partitions() {
+        let group0 = (0..4)
+            .map(|worker_id| assigned_partition_range(8, worker_id))
+            .collect::<Vec<_>>();
+        let group1 = (4..8)
+            .map(|worker_id| assigned_partition_range(8, worker_id))
+            .collect::<Vec<_>>();
+        assert_eq!(group0, vec![0..1, 1..2, 2..3, 3..4]);
+        assert_eq!(group1, vec![4..5, 5..6, 6..7, 7..8]);
     }
 
     #[test]
