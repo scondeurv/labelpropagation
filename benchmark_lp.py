@@ -230,6 +230,7 @@ def benchmark_burst(
 ):
     """Run burst Label Propagation and return (host_total_ms, warm_total_ms, span_ms)."""
     s3_prefix = f"{key_prefix}/large-{num_nodes}"
+    burst_timeout_ms = int(os.environ.get("LP_BURST_TIMEOUT_MS", "900000"))
     
     params = generate_payload(
         endpoint=s3_endpoint,
@@ -258,7 +259,7 @@ def benchmark_burst(
             backend=backend,
             chunk_size=chunk_size,
             is_zip=True,
-            timeout=900000
+            timeout=burst_timeout_ms
         )
         finished = get_millis()
         

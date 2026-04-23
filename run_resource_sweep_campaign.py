@@ -145,8 +145,6 @@ def burst_layout_supported(algorithm: str, partitions: int, granularity: int) ->
     workers = burst_worker_count(partitions, granularity)
     if workers < 2:
         return False
-    if partitions == 32 and granularity == 16:
-        return False
     if algorithm == "labelpropagation" and partitions == 32 and granularity == 2:
         return False
     return True
@@ -380,7 +378,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "constraints": {
             "single_worker_burst": "Se excluyen configuraciones con workers=1 (granularity=partitions) porque no representan paralelismo distribuido real.",
             "power_of_two_burst_sizes": "Las comparativas principales usan burst sizes potencia de dos porque el reduce actual del middleware exige esa topologia.",
-            "burst_runtime_filters": "Se excluyen configuraciones ya diagnosticadas como no defendibles: P=32,g=16 para Burst y LP con P=32,g=2.",
+            "burst_runtime_filters": "Se excluyen configuraciones ya diagnosticadas como no defendibles: LP con P=32,g=2.",
             "phase_separation": "Burst/OpenWhisk y Spark se ejecutan en fases separadas.",
         },
     }
