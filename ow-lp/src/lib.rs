@@ -30,7 +30,7 @@ struct Input {
     convergence_threshold: Option<u32>,
     /// Total number of partitions the graph is divided into
     partitions: u32,
-    /// Number of partitions handled by this specific worker
+    /// Number of workers per Burst pack/group. Each worker handles one global partition.
     granularity: u32,
     #[serde(default)]
     group_id: Option<u32>,
@@ -93,6 +93,11 @@ impl From<Bytes> for LabelsMessage {
     /// Deserializes a byte buffer into a vector of u32 labels (Little Endian).
     /// On LE platforms, uses a single memcpy into a properly aligned u32 buffer.
     fn from(bytes: Bytes) -> Self {
+        assert!(
+            bytes.len() % 4 == 0,
+            "LabelsMessage byte length {} not divisible by 4",
+            bytes.len()
+        );
         let count = bytes.len() / 4;
         #[cfg(target_endian = "little")]
         {
