@@ -1,3 +1,7 @@
+// NOTE: This script is a driver-local Louvain baseline. It collects the full
+// edge list to the driver and runs sequential Louvain on local arrays. It is
+// NOT a distributed Spark/GraphX implementation and must not be reported as a
+// distributed Spark baseline in benchmark comparisons.
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 

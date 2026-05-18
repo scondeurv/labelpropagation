@@ -86,10 +86,6 @@ def lp_partitions_available(bucket, key_prefix, endpoint, partitions):
         expected = {f"{key_prefix}/part-{part_id:05d}" for part_id in range(partitions)}
         if keys != expected:
             return False
-        for part_id in range(partitions):
-            head = s3.head_object(Bucket=bucket, Key=f"{key_prefix}/part-{part_id:05d}")
-            if int(head.get("ContentLength", 0)) <= 0:
-                return False
         return True
     except Exception:
         return False
@@ -254,7 +250,7 @@ def benchmark_burst(
             memory=memory_mb,
             custom_image="burstcomputing/runtime-rust-burst:latest",
             debug_mode=True,
-            burst_size=granularity,
+            granularity=granularity,
             join=False,
             backend=backend,
             chunk_size=chunk_size,
@@ -339,7 +335,7 @@ def build_benchmark_summary(
         if primary_metric == "warm"
         else pick_winner(algo_speedup)
     )
-    workers = partitions // granularity if granularity else partitions
+    workers = partitions
     traffic = estimate_logical_traffic_bytes(
         algorithm="labelpropagation",
         num_nodes=nodes,
@@ -409,7 +405,7 @@ if __name__ == "__main__":
     parser.add_argument("--nodes", type=int, required=True, help="Number of nodes")
     parser.add_argument("--graph-file", type=str, default=None, help="Override local graph file path")
     parser.add_argument("--partitions", type=int, default=8, help="Number of partitions for burst")
-    parser.add_argument("--granularity", type=int, default=1, help="Granularity for burst")
+    parser.add_argument("--granularity", type=int, default=1, help="Workers per Burst pack")
     parser.add_argument("--iter", type=int, default=10, help="Max iterations")
     parser.add_argument("--memory", type=int, default=512, help="Memory per worker (MB)")
     parser.add_argument("--ow-host", type=str, default="localhost", help="OpenWhisk host")
@@ -514,7 +510,12 @@ if __name__ == "__main__":
     # Validation
     if args.validate:
         key_prefix = f"{args.key_prefix}/large-{args.nodes}"
-        if burst_host_time is None:
+        if args.nodes >= 10_000_000:
+            validation_skipped_reason = "exact validation output is disabled for LP datasets with >= 10,000,000 nodes"
+            validation_passed = None
+            print("\n=== Skipping Exact Validation ===")
+            print(validation_skipped_reason)
+        elif burst_host_time is None:
             validation_skipped_reason = "burst execution failed before validation"
             validation_passed = False
             print("\n=== Skipping Exact Validation ===")

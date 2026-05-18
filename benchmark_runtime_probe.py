@@ -192,7 +192,7 @@ def run_probe(args: argparse.Namespace) -> dict:
         debug_mode=True,
         backend=args.backend,
         chunk_size=args.chunk_size,
-        burst_size=args.granularity,
+        granularity=args.granularity,
         join=False,
         timeout=900000,
     )
@@ -236,7 +236,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the generic Burst probe used by the runtime characterization campaign.")
     parser.add_argument("--mode", choices=("startup", "load", "broadcast", "all_to_all", "ptp", "ptp_pairs"), required=True)
     parser.add_argument("--workers", type=int, required=True, help="Logical workers in the burst")
-    parser.add_argument("--granularity", type=int, default=1, help="Partitions per worker")
+    parser.add_argument("--granularity", type=int, default=1, help="Workers per Burst pack")
     parser.add_argument("--payload-bytes", type=int, default=1048576, help="Payload size per message")
     parser.add_argument("--iterations", type=int, default=8, help="Collective iterations")
     parser.add_argument("--memory", type=int, default=1024, help="Memory per worker in MB")

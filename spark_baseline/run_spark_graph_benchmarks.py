@@ -230,6 +230,8 @@ def run_sssp_standalone(graph_file: Path, num_nodes: int, source_node: int) -> d
 
 def run_wcc_standalone(graph_file: Path, num_nodes: int) -> dict[str, Any]:
     candidates = [
+        ROOT / "wcc/ufst/target/release/union-find",
+        ROOT / "wcc/ufst/target/release/ufst",
         ROOT / "unionfind/ufst/target/release/union-find",
         ROOT / "unionfind/ufst/target/release/ufst",
     ]

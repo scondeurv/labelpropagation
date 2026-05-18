@@ -101,11 +101,10 @@ def _write_and_upload(edges, num_partitions, output_local, bucket, s3_prefix, en
             partitions[src_node % num_partitions].append(edge)
 
         for i, part_edges in enumerate(partitions):
-            if part_edges:
-                data = '\n'.join(part_edges).encode('utf-8')
-                s3.put_object(Bucket=bucket, Key=f"{s3_prefix}/part-{i:05d}",
-                              Body=data, ContentType="text/plain")
-                print(f"    Partition {i}: {len(part_edges):,} edges")
+            data = '\n'.join(part_edges).encode('utf-8')
+            s3.put_object(Bucket=bucket, Key=f"{s3_prefix}/part-{i:05d}",
+                          Body=data, ContentType="text/plain")
+            print(f"    Partition {i}: {len(part_edges):,} edges")
 
     print(f"Graph generation complete: {len(edges):,} edges")
 

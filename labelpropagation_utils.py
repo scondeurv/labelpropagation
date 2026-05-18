@@ -12,6 +12,12 @@ AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", "minioadmin")
 AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", "minioadmin")
 
 def generate_payload(endpoint, partitions, num_nodes, bucket, key, convergence_threshold=DEFAULT_CONVERGENCE_THRESHOLD, max_iterations=None, granularity=1):
+    granularity = int(granularity or 1)
+    if granularity <= 0:
+        raise ValueError("granularity must be positive")
+    if partitions % granularity != 0:
+        raise ValueError(f"partitions ({partitions}) must be divisible by granularity ({granularity})")
+
     payload_list = []
     num_requests = partitions
     

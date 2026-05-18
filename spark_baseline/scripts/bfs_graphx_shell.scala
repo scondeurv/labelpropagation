@@ -99,16 +99,13 @@ val maxLevel = if (visitedNodes > 0) reachable.map(_._2).max() else 0
 val computeEndNs = System.nanoTime()
 
 if (persistOutput) {
-  persistLinesFromDriver(
-    outputPath,
-    levels
-      .sortByKey()
-      .toLocalIterator
-      .map { case (id, level) =>
+  levels
+    .sortByKey()
+    .map { case (id, level) =>
       val rendered = if (level == inf) "UNVISITED" else level.toString
       s"$id\t$rendered"
-      }
-  )
+    }
+    .saveAsTextFile(outputPath)
 }
 
 val execEndNs = System.nanoTime()

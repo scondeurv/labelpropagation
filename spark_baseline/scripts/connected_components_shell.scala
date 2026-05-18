@@ -85,13 +85,10 @@ val componentHash = components
 val computeEndNs = System.nanoTime()
 
 if (persistOutput) {
-  persistLinesFromDriver(
-    outputPath,
-    components
-      .sortByKey()
-      .toLocalIterator
-      .map { case (id, component) => s"$id\t$component" }
-  )
+  components
+    .sortByKey()
+    .map { case (id, component) => s"$id\t$component" }
+    .saveAsTextFile(outputPath)
 }
 
 val execEndNs = System.nanoTime()

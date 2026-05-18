@@ -15,6 +15,7 @@ if __name__ == "__main__":
     add_burst_to_parser(parser)
     args = try_or_except(parser)
 
+    effective_granularity = args.granularity or 1
     params = generate_payload(
         endpoint=args.lp_endpoint,
         partitions=args.partitions,
@@ -23,7 +24,7 @@ if __name__ == "__main__":
         key=args.key,
         convergence_threshold=args.convergence_threshold,
         max_iterations=args.max_iterations,
-        granularity=args.granularity
+        granularity=effective_granularity
     )
 
     executor = OpenwhiskExecutor(args.ow_host, args.ow_port, args.debug)
@@ -35,7 +36,7 @@ if __name__ == "__main__":
                         memory=args.runtime_memory if args.runtime_memory else 2048,
                         custom_image=args.custom_image,
                         debug_mode=args.debug,
-                        burst_size=1,
+                        granularity=effective_granularity,
                         join=args.join,
                         backend=args.backend,
                         chunk_size=args.chunk_size,

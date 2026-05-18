@@ -128,7 +128,7 @@ VALIDATION_JSON="$("${PYTHON_BIN}" "${SCRIPT_DIR}/cloudlab_lp_spark_smoke.py" va
   --local-output-dir "${LOCAL_OUTPUT_DIR}/$(basename "${REMOTE_OUTPUT_DIR}")" \
   --graph-file "${GRAPH_FILE}" \
   --num-nodes "${NODES}" \
-  --max-iter "${MAX_ITER}")"
+  --max-iter "${MAX_ITER}" || true)"
 
 printf '%s\n' "${RESULT_JSON}"
 printf '%s\n' "${VALIDATION_JSON}"

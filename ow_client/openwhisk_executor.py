@@ -32,7 +32,7 @@ class OpenwhiskExecutor:
 
     def burst(self, action_name, params_list, file, is_zip=False, memory=256, debug_mode=False, custom_image=None,
               backend="rabbitmq",
-              burst_size=None, chunk_size=None, join=False, timeout=900000) -> ResultDataset:
+              granularity=None, chunk_size=None, join=False, timeout=900000) -> ResultDataset:
         """
         Function to invoke a burst of actions
         :param action_name: the name of the action to invoke. Action must be located into functions folder.
@@ -43,15 +43,15 @@ class OpenwhiskExecutor:
         :param debug_mode: if True, the debug mode is activated
         :param custom_image: if not None, the action is executed in a container with the specified image
         :param backend: the backend to use for the burst. (Rabbitmq, RedisStream...)
-        :param burst_size: granularity of the burst. If None, the burst is executed in heterogeneous mode
+        :param granularity: workers per Burst invocation. If None, heterogeneous mode is used
         :param chunk_size: in burst comm middleware message exchanges (in KB)
-        :param join: if True, the burst is executed in heterogeneous containers that respects the multiplicity of the burst size
+        :param join: if True, the burst is executed in heterogeneous containers that respects requested granularity
         :param timeout: timeout in milliseconds for the action execution (default: 60000)
         :return: Dataset with the results and some metrics of the executions
         """
         dataset = ResultDataset()
         self.__create_action(action_name, file, is_zip, memory, custom_image, timeout)
-        activation_ids = self.__invoke_burst_actions(action_name, params_list, burst_size, backend, chunk_size, join,
+        activation_ids = self.__invoke_burst_actions(action_name, params_list, granularity, backend, chunk_size, join,
                                                      debug_mode)
         for index, activation_id in enumerate(activation_ids):
             dataset.add_invocation(index, activation_id, time.time(), is_burst=True)
@@ -183,11 +183,11 @@ class OpenwhiskExecutor:
             time.sleep(self.__monitor_interval)
         return dataset
 
-    def __invoke_burst_actions(self, action_name, params_list, burst_size,
+    def __invoke_burst_actions(self, action_name, params_list, granularity,
                                backend, chunk_size, join, debug_mode) -> List[str] | None:
         burst_url = f"{self.protocol}://{self.host}:{self.port}/api/v1/namespaces/guest/actions/{action_name}?burst=true"
-        if burst_size:
-            burst_url += f"&granularity={burst_size}"
+        if granularity:
+            burst_url += f"&granularity={granularity}"
         if join:
             burst_url += "&join=true"
         if chunk_size:

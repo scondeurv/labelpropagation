@@ -4,8 +4,9 @@ VALID_BURST_BACKEND_OPTIONS = ["rabbitmq", "redis", "redis-stream", "redis-list"
 DEFAULT_DOCKER_IMAGE = "burstcomputing/runtime-rust-burst:latest"
 
 def add_burst_to_parser(parser):
-    parser.add_argument("--granularity", type=int, required=False, help="Granularity of burst workers", default=None)
-    parser.add_argument("--join", type=bool, required=False, help="Join burst workers in same invoker", default=False)
+    parser.add_argument("--granularity", type=int, required=False, help="Workers per Burst pack", default=None)
+    parser.add_argument("--join", action=argparse.BooleanOptionalAction, required=False,
+                        help="Join burst workers in same invoker", default=False)
     parser.add_argument("--backend", type=str, required=True, help="Burst communication backend",
                         choices=VALID_BURST_BACKEND_OPTIONS)
     parser.add_argument("--chunk-size", type=int, required=False, help="Chunk size for burst messages (in KB)",
