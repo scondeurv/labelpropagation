@@ -258,9 +258,10 @@ def estimate_wcc_phase_metrics(
     warm_total_ms = int(timing_details.get("warm_total_ms") or 0)
     # computation_ms = local_uf_start → global_merge_end (pure compute, excluding S3 load)
     compute_ms = int(timing_details.get("computation_ms") or 0)
-    # load_ms from timing_details when the action reports separate S3 timestamps
+    # load_ms is only reported when the action has separate S3 timestamps.
+    # Otherwise the non-compute part of the warm span is treated as communication.
     raw_load_ms = timing_details.get("load_ms")
-    load_ms = int(raw_load_ms) if raw_load_ms is not None else max(0, warm_total_ms - compute_ms)
+    load_ms = int(raw_load_ms) if raw_load_ms is not None else 0
     derived_host_total = int(timing_details.get("total_ms") or 0)
     host_total_ms = int(host_total_ms if host_total_ms is not None else derived_host_total)
     communication_ms = max(0, warm_total_ms - load_ms - compute_ms)

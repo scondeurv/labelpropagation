@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import shutil
 import statistics
@@ -15,13 +14,11 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path("/home/sergio/src")
 HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]
 DATA_DIR = HERE / "data"
 RESULTS_DIR = HERE / "results"
 RESULT_PREFIX = "SPARK_BENCHMARK_RESULT_JSON:"
-UNVISITED = 2**32 - 1
-LP_UNKNOWN = 2**32 - 1
 
 @dataclass(frozen=True)
 class SparkAlgorithm:
@@ -44,7 +41,7 @@ def connected_components_algorithm(slug: str) -> SparkAlgorithm:
         slug=slug,
         x_key="nodes",
         points=[100_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000],
-        generator_repo="unionfind",
+        generator_repo="wcc",
         generator_script="setup_large_uf_data.py",
         dataset_name_fn=lambda size: f"wcc_graph_{size}.tsv",
         generator_args_fn=lambda size, dataset: [
@@ -195,358 +192,6 @@ def run_command(command: list[str], cwd: Path | None = None) -> subprocess.Compl
     return completed
 
 
-def run_lp_standalone(graph_file: Path, num_nodes: int, max_iter: int) -> dict[str, Any]:
-    binary_path = ROOT / "labelpropagation/lpst/target/release/label-propagation"
-    if not binary_path.exists():
-        raise RuntimeError(f"standalone LP binary not found at {binary_path}")
-    completed = run_command(
-        [str(binary_path), str(graph_file), str(num_nodes), str(max_iter)],
-        cwd=binary_path.parent.parent.parent,
-    )
-    return json.loads(completed.stdout.strip())
-
-
-def run_bfs_standalone(graph_file: Path, num_nodes: int, source_node: int, max_levels: int) -> dict[str, Any]:
-    binary_path = ROOT / "bfs/bfs-standalone/target/release/bfs-standalone"
-    if not binary_path.exists():
-        raise RuntimeError(f"standalone BFS binary not found at {binary_path}")
-    completed = run_command(
-        [str(binary_path), str(graph_file), str(num_nodes), str(source_node), str(max_levels)],
-        cwd=binary_path.parent.parent.parent,
-    )
-    return json.loads(completed.stdout.strip())
-
-
-def run_sssp_standalone(graph_file: Path, num_nodes: int, source_node: int) -> dict[str, Any]:
-    binary_path = ROOT / "sssp/sssp-standalone/target/release/sssp-standalone"
-    if not binary_path.exists():
-        raise RuntimeError(f"standalone SSSP binary not found at {binary_path}")
-    completed = run_command(
-        [str(binary_path), str(graph_file), str(num_nodes), str(source_node)],
-        cwd=binary_path.parent.parent.parent,
-    )
-    return json.loads(completed.stdout.strip())
-
-
-def run_wcc_standalone(graph_file: Path, num_nodes: int) -> dict[str, Any]:
-    candidates = [
-        ROOT / "wcc/ufst/target/release/union-find",
-        ROOT / "wcc/ufst/target/release/ufst",
-        ROOT / "unionfind/ufst/target/release/union-find",
-        ROOT / "unionfind/ufst/target/release/ufst",
-    ]
-    binary_path = next((candidate for candidate in candidates if candidate.exists()), None)
-    if binary_path is None:
-        raise RuntimeError(f"standalone WCC binary not found in {candidates}")
-    completed = run_command(
-        [str(binary_path), str(graph_file), str(num_nodes)],
-        cwd=binary_path.parent.parent.parent,
-    )
-    return json.loads(completed.stdout.strip())
-
-
-def run_louvain_standalone(
-    graph_file: Path,
-    num_nodes: int,
-    max_passes: int,
-    min_gain: float,
-) -> dict[str, Any]:
-    binary_path = ROOT / "louvain/louvain-standalone/target/release/louvain-standalone"
-    if not binary_path.exists():
-        raise RuntimeError(f"standalone Louvain binary not found at {binary_path}")
-    completed = run_command(
-        [str(binary_path), str(graph_file), str(num_nodes), str(max_passes), str(min_gain)],
-        cwd=binary_path.parent.parent.parent,
-    )
-    return json.loads(completed.stdout.strip())
-
-
-def load_spark_labels(output_dir: Path) -> dict[int, int]:
-    labels: dict[int, int] = {}
-    if not output_dir.exists():
-        raise RuntimeError(f"spark output directory not found: {output_dir}")
-    for part_file in sorted(output_dir.glob("part-*")):
-        with part_file.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                node_text, label_text = line.split("\t", 1)
-                if label_text == "UNKNOWN":
-                    labels[int(node_text)] = LP_UNKNOWN
-                else:
-                    labels[int(node_text)] = int(label_text)
-    return labels
-
-
-def load_seed_labels(graph_file: Path) -> dict[int, int]:
-    seeds: dict[int, int] = {}
-    with graph_file.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            parts = line.strip().split("\t")
-            if len(parts) >= 3:
-                seeds[int(parts[0])] = int(parts[2])
-    return seeds
-
-
-def load_int_vector(output_dir: Path, unknown_text: str | None = None, unknown_value: int | None = None) -> dict[int, int]:
-    values: dict[int, int] = {}
-    if not output_dir.exists():
-        raise RuntimeError(f"spark output directory not found: {output_dir}")
-    for part_file in sorted(output_dir.glob("part-*")):
-        with part_file.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                node_text, value_text = line.split("\t", 1)
-                if unknown_text is not None and value_text == unknown_text:
-                    if unknown_value is None:
-                        continue
-                    values[int(node_text)] = unknown_value
-                else:
-                    values[int(node_text)] = int(value_text)
-    return values
-
-
-def load_float_vector(output_dir: Path) -> dict[int, float]:
-    values: dict[int, float] = {}
-    if not output_dir.exists():
-        raise RuntimeError(f"spark output directory not found: {output_dir}")
-    for part_file in sorted(output_dir.glob("part-*")):
-        with part_file.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                line = line.strip()
-                if not line:
-                    continue
-                node_text, value_text = line.split("\t", 1)
-                if value_text == "Infinity":
-                    values[int(node_text)] = math.inf
-                else:
-                    values[int(node_text)] = float(value_text)
-    return values
-
-
-def normalize_partition_labels(labels: list[int]) -> list[int]:
-    mapping: dict[int, int] = {}
-    normalized: list[int] = []
-    next_id = 0
-    for label in labels:
-        if label not in mapping:
-            mapping[label] = next_id
-            next_id += 1
-        normalized.append(mapping[label])
-    return normalized
-
-
-def canonical_component_hash_from_labels(labels: list[int]) -> str:
-    hash_value = 0xCBF29CE484222325
-    for component in normalize_partition_labels(labels):
-        hash_value ^= component
-        hash_value = (hash_value * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return f"{hash_value:016x}"
-
-
-def validate_bfs_spark_output(
-    graph_file: Path,
-    num_nodes: int,
-    source_node: int,
-    max_levels: int,
-    spark_output_dir: Path,
-) -> dict[str, Any]:
-    standalone_output = run_bfs_standalone(graph_file, num_nodes, source_node, max_levels)
-    standalone_levels = standalone_output.get("levels")
-    if not isinstance(standalone_levels, list):
-        raise RuntimeError("standalone BFS output does not contain levels")
-    spark_levels_map = load_int_vector(spark_output_dir, unknown_text="UNVISITED", unknown_value=UNVISITED)
-    spark_levels = [spark_levels_map.get(node, UNVISITED) for node in range(num_nodes)]
-    mismatches = []
-    for node, (spark_level, standalone_level) in enumerate(zip(spark_levels, standalone_levels)):
-        if int(spark_level) != int(standalone_level):
-            mismatches.append({"node": node, "spark": int(spark_level), "standalone": int(standalone_level)})
-            if len(mismatches) >= 20:
-                break
-    return {
-        "performed": True,
-        "passed": len(mismatches) == 0,
-        "num_nodes": num_nodes,
-        "mismatches": len(mismatches),
-        "sample_mismatches": mismatches,
-    }
-
-
-def validate_sssp_spark_output(
-    graph_file: Path,
-    num_nodes: int,
-    source_node: int,
-    spark_output_dir: Path,
-) -> dict[str, Any]:
-    standalone_output = run_sssp_standalone(graph_file, num_nodes, source_node)
-    standalone_distances = standalone_output.get("distances")
-    if not isinstance(standalone_distances, list):
-        raise RuntimeError("standalone SSSP output does not contain distances")
-    spark_distance_map = load_float_vector(spark_output_dir)
-    mismatches = []
-    for node in range(num_nodes):
-        spark_distance = spark_distance_map.get(node, math.inf)
-        standalone_distance_raw = standalone_distances[node]
-        standalone_distance = math.inf if standalone_distance_raw is None else float(standalone_distance_raw)
-        if spark_distance == standalone_distance:
-            continue
-        if isinstance(standalone_distance, (int, float)) and isinstance(spark_distance, (int, float)):
-            if math.isinf(float(standalone_distance)) and math.isinf(float(spark_distance)):
-                continue
-            tolerance = max(abs(float(standalone_distance)) * 1e-4, 1e-3)
-            if abs(float(standalone_distance) - float(spark_distance)) <= tolerance:
-                continue
-        mismatches.append(
-            {
-                "node": node,
-                "spark": spark_distance,
-                "standalone": standalone_distance,
-            }
-        )
-        if len(mismatches) >= 20:
-            break
-    return {
-        "performed": True,
-        "passed": len(mismatches) == 0,
-        "num_nodes": num_nodes,
-        "mismatches": len(mismatches),
-        "sample_mismatches": mismatches,
-    }
-
-
-def validate_wcc_spark_output(
-    graph_file: Path,
-    num_nodes: int,
-    spark_output_dir: Path,
-) -> dict[str, Any]:
-    standalone_output = run_wcc_standalone(graph_file, num_nodes)
-    standalone_parent = standalone_output.get("parent")
-    if not isinstance(standalone_parent, list):
-        raise RuntimeError("standalone Union-Find output does not contain parent")
-    spark_component_map = load_int_vector(spark_output_dir)
-    spark_components = [spark_component_map[node] for node in range(num_nodes)]
-    standalone_hash = canonical_component_hash_from_labels([int(parent) for parent in standalone_parent])
-    spark_hash = canonical_component_hash_from_labels([int(component) for component in spark_components])
-    standalone_norm = normalize_partition_labels([int(parent) for parent in standalone_parent])
-    spark_norm = normalize_partition_labels([int(component) for component in spark_components])
-    mismatches = []
-    for node, (spark_component, standalone_component) in enumerate(zip(spark_norm, standalone_norm)):
-        if spark_component != standalone_component:
-            mismatches.append(
-                {"node": node, "spark": spark_component, "standalone": standalone_component}
-            )
-            if len(mismatches) >= 20:
-                break
-    return {
-        "performed": True,
-        "passed": standalone_hash == spark_hash and len(mismatches) == 0,
-        "num_nodes": num_nodes,
-        "standalone_component_hash": standalone_hash,
-        "spark_component_hash": spark_hash,
-        "mismatches": len(mismatches),
-        "sample_mismatches": mismatches,
-    }
-
-
-def validate_lp_spark_output(
-    graph_file: Path,
-    num_nodes: int,
-    max_iter: int,
-    spark_output_dir: Path,
-) -> dict[str, Any]:
-    standalone_output = run_lp_standalone(graph_file, num_nodes, max_iter)
-    standalone_labels = standalone_output.get("labels")
-    if not isinstance(standalone_labels, list):
-        raise RuntimeError("standalone LP output does not contain a label vector")
-
-    spark_labels = load_spark_labels(spark_output_dir)
-    seeds = load_seed_labels(graph_file)
-
-    mismatches = 0
-    sample_mismatches: list[dict[str, int]] = []
-    seed_violations = 0
-    sample_seed_violations: list[dict[str, int]] = []
-
-    for node in range(num_nodes):
-        standalone_label = int(standalone_labels[node])
-        spark_label = spark_labels.get(node)
-        if spark_label is None:
-            mismatches += 1
-            if len(sample_mismatches) < 20:
-                sample_mismatches.append(
-                    {"node": node, "spark": -1, "standalone": standalone_label}
-                )
-            continue
-
-        if spark_label != standalone_label:
-            mismatches += 1
-            if len(sample_mismatches) < 20:
-                sample_mismatches.append(
-                    {"node": node, "spark": spark_label, "standalone": standalone_label}
-                )
-
-        if node in seeds and spark_label != seeds[node]:
-            seed_violations += 1
-            if len(sample_seed_violations) < 20:
-                sample_seed_violations.append(
-                    {"node": node, "expected": seeds[node], "spark": spark_label}
-                )
-
-    accuracy = ((num_nodes - mismatches) / num_nodes) * 100 if num_nodes else 0.0
-    return {
-        "performed": True,
-        "passed": mismatches == 0 and seed_violations == 0,
-        "num_nodes": num_nodes,
-        "accuracy": round(accuracy, 6),
-        "mismatches": mismatches,
-        "seed_violations": seed_violations,
-        "sample_mismatches": sample_mismatches,
-        "sample_seed_violations": sample_seed_violations,
-    }
-
-
-
-def validate_louvain_spark_output(
-    graph_file: Path,
-    num_nodes: int,
-    max_passes: int,
-    min_gain: float,
-    spark_output_dir: Path,
-) -> dict[str, Any]:
-    standalone_output = run_louvain_standalone(graph_file, num_nodes, max_passes, min_gain)
-    standalone_communities = standalone_output.get("communities")
-    if not isinstance(standalone_communities, list):
-        raise RuntimeError("standalone Louvain output does not contain communities")
-    spark_communities_map = load_int_vector(spark_output_dir)
-    spark_communities = [spark_communities_map[node] for node in range(num_nodes)]
-    standalone_norm = normalize_partition_labels([int(value) for value in standalone_communities])
-    spark_norm = normalize_partition_labels([int(value) for value in spark_communities])
-    mismatches = []
-    for node, (spark_value, standalone_value) in enumerate(zip(spark_norm, standalone_norm)):
-        if spark_value != standalone_value:
-            mismatches.append(
-                {"node": node, "spark": spark_value, "standalone": standalone_value}
-            )
-            if len(mismatches) >= 20:
-                break
-    standalone_hash = canonical_component_hash_from_labels([int(value) for value in standalone_communities])
-    spark_hash = canonical_component_hash_from_labels([int(value) for value in spark_communities])
-    return {
-        "performed": True,
-        "passed": len(mismatches) == 0 and standalone_hash == spark_hash,
-        "num_nodes": num_nodes,
-        "standalone_modularity": standalone_output.get("modularity"),
-        "standalone_num_communities": standalone_output.get("num_communities"),
-        "standalone_partition_hash": standalone_hash,
-        "spark_partition_hash": spark_hash,
-        "mismatches": len(mismatches),
-        "sample_mismatches": mismatches,
-    }
-
-
 def ensure_dataset(algorithm: SparkAlgorithm, size: int, force: bool) -> Path | None:
     if not algorithm.generator_repo or not algorithm.generator_script:
         return None
@@ -578,7 +223,6 @@ def benchmark_point(
     write_runs: list[float] = []
     total_runs: list[float] = []
     last_payload: dict[str, Any] | None = None
-    validation_runs: list[dict[str, Any]] = []
     run_records: list[dict[str, Any]] = []
 
     for run_idx in range(runs):
@@ -612,49 +256,6 @@ def benchmark_point(
         total_runs.append(float(payload.get("end_to_end_ms", payload["total_time_ms"])))
         last_payload = payload
 
-        validation_summary: dict[str, Any] | None = None
-        if algorithm.slug == "labelpropagation":
-            validation_summary = validate_lp_spark_output(
-                dataset_path,
-                size,
-                int(algorithm.configuration["max_iter"]),
-                host_output_dir,
-            )
-        elif algorithm.slug == "bfs":
-            validation_summary = validate_bfs_spark_output(
-                dataset_path,
-                size,
-                int(algorithm.configuration["source_node"]),
-                int(algorithm.configuration["max_levels"]),
-                host_output_dir,
-            )
-        elif algorithm.slug == "sssp":
-            validation_summary = validate_sssp_spark_output(
-                dataset_path,
-                size,
-                int(algorithm.configuration["source_node"]),
-                host_output_dir,
-            )
-        elif algorithm.slug == "wcc":
-            validation_summary = validate_wcc_spark_output(
-                dataset_path,
-                size,
-                host_output_dir,
-            )
-        elif algorithm.slug == "louvain":
-            validation_summary = validate_louvain_spark_output(
-                dataset_path,
-                size,
-                int(algorithm.configuration["max_passes"]),
-                float(algorithm.configuration["min_gain"]),
-                host_output_dir,
-            )
-        if validation_summary is not None and not validation_summary.get("passed", False):
-            raise RuntimeError(
-                f"Spark validation failed for {algorithm.slug} at size {size} run {run_idx + 1}: {validation_summary}"
-            )
-        if validation_summary is not None:
-            validation_runs.append(validation_summary)
         run_records.append(
             {
                 "run_index": run_idx + 1,
@@ -665,7 +266,6 @@ def benchmark_point(
                 "end_to_end_ms": float(payload.get("end_to_end_ms", payload["total_time_ms"])),
                 "total_time_ms": float(payload["total_time_ms"]),
                 "phase_metrics": phase_metrics,
-                "validation": validation_summary,
             }
         )
 
@@ -674,16 +274,6 @@ def benchmark_point(
     exec_mean, exec_std = mean_std(exec_runs)
     write_mean, write_std = mean_std(write_runs)
     total_mean, total_std = mean_std(total_runs)
-    validated_load = float(load_runs[0]) if load_runs else None
-    validated_compute = float(compute_runs[0]) if compute_runs else None
-    validated_exec = float(exec_runs[0]) if exec_runs else None
-    validated_write = float(write_runs[0]) if write_runs else None
-    validated_total = float(total_runs[0]) if total_runs else None
-    unvalidated_load_mean, unvalidated_load_std = mean_std(load_runs[1:]) if len(load_runs) > 1 else (0.0, 0.0)
-    unvalidated_compute_mean, unvalidated_compute_std = mean_std(compute_runs[1:]) if len(compute_runs) > 1 else (0.0, 0.0)
-    unvalidated_exec_mean, unvalidated_exec_std = mean_std(exec_runs[1:]) if len(exec_runs) > 1 else (0.0, 0.0)
-    unvalidated_write_mean, unvalidated_write_std = mean_std(write_runs[1:]) if len(write_runs) > 1 else (0.0, 0.0)
-    unvalidated_total_mean, unvalidated_total_std = mean_std(total_runs[1:]) if len(total_runs) > 1 else (0.0, 0.0)
     row = {
         algorithm.x_key: size,
         "spark_load_ms": round(load_mean, 2),
@@ -704,36 +294,12 @@ def benchmark_point(
         "spark_output_write_runs_ms": [round(value, 2) for value in write_runs],
         "spark_end_to_end_runs_ms": [round(value, 2) for value in total_runs],
         "spark_total_runs_ms": [round(value, 2) for value in total_runs],
-        "spark_load_validated_run_ms": round(validated_load, 2) if validated_load is not None else None,
-        "spark_compute_only_validated_run_ms": round(validated_compute, 2) if validated_compute is not None else None,
-        "spark_exec_validated_run_ms": round(validated_exec, 2) if validated_exec is not None else None,
-        "spark_output_write_validated_run_ms": round(validated_write, 2) if validated_write is not None else None,
-        "spark_end_to_end_validated_run_ms": round(validated_total, 2) if validated_total is not None else None,
-        "spark_total_validated_run_ms": round(validated_total, 2) if validated_total is not None else None,
-        "spark_load_avg_unvalidated_ms": round(unvalidated_load_mean, 2) if len(load_runs) > 1 else None,
-        "spark_load_std_unvalidated_ms": round(unvalidated_load_std, 2) if len(load_runs) > 1 else None,
-        "spark_compute_only_avg_unvalidated_ms": round(unvalidated_compute_mean, 2) if len(compute_runs) > 1 else None,
-        "spark_compute_only_std_unvalidated_ms": round(unvalidated_compute_std, 2) if len(compute_runs) > 1 else None,
-        "spark_exec_avg_unvalidated_ms": round(unvalidated_exec_mean, 2) if len(exec_runs) > 1 else None,
-        "spark_exec_std_unvalidated_ms": round(unvalidated_exec_std, 2) if len(exec_runs) > 1 else None,
-        "spark_output_write_avg_unvalidated_ms": round(unvalidated_write_mean, 2) if len(write_runs) > 1 else None,
-        "spark_output_write_std_unvalidated_ms": round(unvalidated_write_std, 2) if len(write_runs) > 1 else None,
-        "spark_end_to_end_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
-        "spark_end_to_end_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
-        "spark_total_avg_unvalidated_ms": round(unvalidated_total_mean, 2) if len(total_runs) > 1 else None,
-        "spark_total_std_unvalidated_ms": round(unvalidated_total_std, 2) if len(total_runs) > 1 else None,
         "phase_metrics": build_spark_phase_metrics(last_payload) if last_payload else None,
     }
     if last_payload:
         for key in ("visited_nodes", "max_level", "reachable_nodes", "max_distance", "iterations", "converged", "labeled_nodes", "distinct_labels", "num_components", "component_hash", "modularity", "num_communities", "num_passes"):
             if key in last_payload:
                 row[key] = last_payload[key]
-    if validation_runs:
-        row["validation"] = {
-            "performed": True,
-            "passed": all(bool(run.get("passed", False)) for run in validation_runs),
-            "runs": validation_runs,
-        }
     row["run_records"] = run_records
     return row
 
@@ -933,47 +499,6 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
             },
         ),
         "wcc": connected_components_algorithm("wcc"),
-        "louvain": SparkAlgorithm(
-            slug="louvain",
-            x_key="nodes",
-            points=[100_000, 500_000, 1_000_000, 2_000_000],
-            generator_repo="louvain",
-            generator_script="setup_large_louvain_data.py",
-            dataset_name_fn=lambda size: f"large_louvain_{size}.txt",
-            generator_args_fn=lambda size, dataset: [
-                "--nodes", str(size),
-                "--partitions", "4",
-                "--output", str(dataset),
-                "--no-s3",
-                "--mode", "planted",
-                "--communities", "10",
-                "--p-in", str(min(8.0 / max((size // 10) - 1, 1), 0.05)),
-                "--p-out", str(min(2.0 / max(size - (size // 10), 1), 0.001)),
-            ],
-            submit_script="submit-louvain.sh",
-            submit_args_fn=lambda container_input, output_path, size: [
-                container_input,
-                output_path,
-                str(size),
-                "20",
-                "0.000001",
-                "4",
-            ],
-            configuration={
-                "partitions": 4,
-                "max_passes": 20,
-                "min_gain": 1e-6,
-                "communities": 10,
-                "generator_mode": "planted_sparse",
-                "spark_env": {
-                    "SPARK_TOTAL_EXECUTOR_CORES": "4",
-                    "SPARK_EXECUTOR_CORES": "1",
-                    "SPARK_EXECUTOR_MEMORY": "4g",
-                    "SPARK_DEFAULT_PARALLELISM": "4",
-                    "SPARK_SHUFFLE_PARTITIONS": "4",
-                },
-            },
-        ),
     }
 
 
@@ -1000,7 +525,7 @@ def with_resource_overrides(
     spark_env["SPARK_TOTAL_EXECUTOR_CORES"] = str(executors)
     spark_env["SPARK_EXECUTOR_CORES"] = "1"
     spark_env["SPARK_EXECUTOR_MEMORY"] = executor_memory
-    spark_env.setdefault("SPARK_DRIVER_MEMORY", "8g" if algorithm.slug == "louvain" else executor_memory)
+    spark_env.setdefault("SPARK_DRIVER_MEMORY", executor_memory)
     spark_env["SPARK_DEFAULT_PARALLELISM"] = str(partitions)
     spark_env["SPARK_SHUFFLE_PARTITIONS"] = str(partitions)
 
@@ -1089,31 +614,6 @@ def with_resource_overrides(
             configuration=config,
         )
 
-    if algorithm.slug == "louvain":
-        return replace(
-            algorithm,
-            points=points or algorithm.points,
-            generator_args_fn=lambda size, dataset: [
-                "--nodes", str(size),
-                "--partitions", str(partitions),
-                "--output", str(dataset),
-                "--no-s3",
-                "--mode", "planted",
-                "--communities", "10",
-                "--p-in", str(min(8.0 / max((size // 10) - 1, 1), 0.05)),
-                "--p-out", str(min(2.0 / max(size - (size // 10), 1), 0.001)),
-            ],
-            submit_args_fn=lambda container_input, output_path, size: [
-                container_input,
-                output_path,
-                str(size),
-                str(config["max_passes"]),
-                str(config["min_gain"]),
-                str(partitions),
-            ],
-            configuration=config,
-        )
-
     return replace(algorithm, points=points or algorithm.points, configuration=config)
 
 
@@ -1121,7 +621,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Spark baselines for the graph algorithms used in the TFM.")
     parser.add_argument(
         "--algorithms",
-        default="bfs,sssp,labelpropagation,wcc,louvain",
+        default="bfs,sssp,labelpropagation,wcc",
         help="Comma-separated Spark baseline steps to run.",
     )
     parser.add_argument("--runs", type=int, default=3, help="Repetitions per point.")

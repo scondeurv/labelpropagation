@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Generate large graph datasets for Label Propagation benchmarking.
-Creates both local .txt file for standalone version and S3 partitions for burst version.
+Creates a local .txt graph file and, optionally, S3 partitions for Burst.
 
 Supports two graph models:
   --model random  (default) Random directed graph, same structure as BFS/SSSP.
@@ -11,11 +11,8 @@ Supports two graph models:
                   Seeds: 10% of nodes, 4 label groups by position in ring.
 """
 import argparse
-import io
 import os
 import numpy as np
-import boto3
-from botocore.client import Config
 
 
 def generate_random_graph(num_nodes, num_partitions, output_local, bucket=None, s3_prefix=None,
@@ -80,6 +77,9 @@ def _write_and_upload(edges, num_partitions, output_local, bucket, s3_prefix, en
         f.write('\n'.join(edges))
 
     if bucket and s3_prefix:
+        import boto3
+        from botocore.client import Config
+
         ep = endpoint if endpoint.startswith("http") else f"http://{endpoint}"
         print(f"  Uploading to S3: {bucket}/{s3_prefix}/ ({num_partitions} partitions)")
         s3 = boto3.client(

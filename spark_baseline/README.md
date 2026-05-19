@@ -1,14 +1,14 @@
 # Spark Baseline
 
-Baseline de Apache Spark para comparar contra las implementaciones `standalone`
-y `burst` del TFM.
+Baseline de Apache Spark para comparar contra las ejecuciones `burst` de la
+campaña CloudLab del TFM.
 
 ## Objetivo
 
 Este baseline prioriza una configuración reproducible y sencilla:
 
 - Spark en `docker compose`
-- modo `standalone`
+- modo cluster de Spark
 - `GraphX` como API base
 - primer job listo: `SSSPGraphXJob`
 
@@ -125,7 +125,7 @@ El runner actual imprime un JSON con:
 - `reachable_nodes`
 - `max_distance`
 
-Esto permite compararlo con la estructura que ya usas en `standalone` y `burst`.
+Esto permite compararlo con la estructura que ya usas en la campaña `burst`.
 
 ## Campaña agregada
 
@@ -141,8 +141,3 @@ Por defecto cubre:
 - `sssp`
 - `labelpropagation`
 - `wcc`
-- `louvain`
-
-En `louvain`, el runner deja constancia explícita de que no hay todavía una
-implementación Spark semánticamente equivalente y por tanto la baseline se marca
-como no comparable en vez de forzar una comparación injusta.

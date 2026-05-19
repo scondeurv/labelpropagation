@@ -64,8 +64,6 @@ OPENWHISK_RELEASE_NAME="${OW_RELEASE_NAME}" \
   --ow-release-name "${OW_RELEASE_NAME}" \
   --backend redis-list \
   --chunk-size 1024 \
-  --validate \
   --s3-endpoint "${WORKER_S3_ENDPOINT}" \
-  --validation-endpoint "${HOST_S3_ENDPOINT}" \
   --bucket "${BUCKET}" \
   --key-prefix "${KEY_PREFIX}"

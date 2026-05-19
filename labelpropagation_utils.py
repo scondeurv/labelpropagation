@@ -1,8 +1,5 @@
 import argparse
-import json
-import boto3
 import os
-from pprint import pprint
 
 DEFAULT_CONVERGENCE_THRESHOLD = 0
 DEFAULT_OUTPUT = "labelpropagation_payload.json"

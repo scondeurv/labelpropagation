@@ -6,7 +6,7 @@ worker más justo, este experimento asume:
 - `Spark`: `4` workers, `1 vCPU` real por worker, `1` core por executor
 - `Burst`: `4` workers lógicos, `granularity=1`, y `1 vCPU` por pod de acción
 
-El fichero [openwhisk_action_cpu_limitrange.yaml](/home/sergio/src/labelpropagation/spark_baseline/openwhisk_action_cpu_limitrange.yaml)
+El fichero `openwhisk_action_cpu_limitrange.yaml`
 define un `LimitRange` que fuerza `requests.cpu=1` y `limits.cpu=1` por
 contenedor para los pods del namespace `openwhisk` que no declaren CPU
 explícitamente.
@@ -14,7 +14,7 @@ explícitamente.
 Aplicación:
 
 ```bash
-kubectl apply -f /home/sergio/src/labelpropagation/spark_baseline/openwhisk_action_cpu_limitrange.yaml
+kubectl apply -f labelpropagation/spark_baseline/openwhisk_action_cpu_limitrange.yaml
 ```
 
 Verificación sugerida:

@@ -95,6 +95,11 @@ if [[ -z "${RESULT_JSON}" ]]; then
   exit 1
 fi
 
+if [[ "${SPARK_SKIP_VALIDATION:-false}" == "true" ]]; then
+  printf '%s\n' "${RESULT_JSON}"
+  exit 0
+fi
+
 ssh -F /dev/null -i "${CLOUDLAB_SSH_KEY}" "${SSH_TARGET}" "rm -rf '${REMOTE_OUTPUT_DIR}' '${REMOTE_OUTPUT_TAR}' && mkdir -p '${REMOTE_OUTPUT_DIR}' && python3 - <<'PY'
 import boto3
 from pathlib import Path

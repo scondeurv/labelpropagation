@@ -15,7 +15,6 @@ Burst vs Spark for Label Propagation. Used by the multi-algorithm CloudLab campa
 | `run_cloudlab_smoke_lp_spark.sh` | Spark smoke test on CloudLab |
 | `compile_lp_cluster.sh` | Rebuild `labelpropagation.zip` from `ow-lp/` |
 | `benchmark_runtime_probe.py`, `runtime_probe.zip`, `compile_runtime_probe_cluster.sh` | Runtime characterization probe |
-| `lpst/` | Standalone Rust LP runner (validation reference) |
 | `spark_baseline/` | Spark LP job (Scala) |
 | `ow-lp/`, `ow-runtime-probe/` | Burst Rust workers |
 | `ow_client/` | OpenWhisk client used by `benchmark_lp.py` |
@@ -34,12 +33,6 @@ Replica (size sweep only, reuses winners):
 campaigns/launch_replicas.sh replica4
 ```
 
-Standalone Rust binary used for LP exact-validation:
-
-```
-cd lpst && cargo build --release
-```
-
 ## Manual data generation
 
 ```
@@ -50,5 +43,5 @@ Datasets land in the campaign directory under `<campaign-root>/datasets/`. S3 pa
 
 ## Notes
 
-- LP exact-validation (Burst vs standalone) is automatic in the campaign runner when `algo.has_standalone_validation == True`.
+- The packaged CloudLab campaign does not run output validation during the measurement sweep.
 - Reports + figures are generated from `<campaign-root>/size_sweep/` JSONs by `doc-tfm/reportes/generar_graficas_multi.py` and `analisis_robustez.py`.
