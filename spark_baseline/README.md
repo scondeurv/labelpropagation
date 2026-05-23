@@ -25,7 +25,6 @@ por worker en BFS/SSSP/Label Propagation).
 - `scripts/submit-sssp.sh`: benchmark de SSSP usando `spark-shell`
 - `scripts/submit-bfs.sh`: benchmark de BFS usando `spark-shell`
 - `scripts/submit-lp.sh`: benchmark de Label Propagation semisupervisado usando `spark-shell`
-- `scripts/submit-wcc.sh`: baseline de Connected Components para comparar con WCC
 - `run_spark_graph_benchmarks.py`: runner agregado para lanzar la malla completa de Spark
 - `data/`: datasets montados dentro de los contenedores
 - `results/`: salidas de Spark
@@ -140,4 +139,3 @@ Por defecto cubre:
 - `bfs`
 - `sssp`
 - `labelpropagation`
-- `wcc`

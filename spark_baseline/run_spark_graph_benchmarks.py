@@ -36,44 +36,6 @@ class SparkAlgorithm:
     unsupported_reason: str | None = None
 
 
-def connected_components_algorithm(slug: str) -> SparkAlgorithm:
-    return SparkAlgorithm(
-        slug=slug,
-        x_key="nodes",
-        points=[100_000, 500_000, 1_000_000, 2_000_000, 3_000_000, 5_000_000],
-        generator_repo="wcc",
-        generator_script="setup_large_uf_data.py",
-        dataset_name_fn=lambda size: f"wcc_graph_{size}.tsv",
-        generator_args_fn=lambda size, dataset: [
-            "--nodes", str(size),
-            "--edges-per-node", "5",
-            "--components", "10",
-            "--partitions", "4",
-            "--output", str(dataset),
-            "--key", f"wcc-graphs/wcc-{size}",
-            "--no-s3",
-        ],
-        submit_script="submit-wcc.sh",
-        submit_args_fn=lambda container_input, output_path, _size: [
-            container_input,
-            output_path,
-            "4",
-        ],
-        configuration={
-            "partitions": 4,
-            "edges_per_node": 5,
-            "components": 10,
-            "spark_env": {
-                "SPARK_TOTAL_EXECUTOR_CORES": "4",
-                "SPARK_EXECUTOR_CORES": "1",
-                "SPARK_EXECUTOR_MEMORY": "4g",
-                "SPARK_DEFAULT_PARALLELISM": "4",
-                "SPARK_SHUFFLE_PARTITIONS": "4",
-            },
-        },
-    )
-
-
 def checkpoint_path(algorithm: SparkAlgorithm) -> Path:
     return RESULTS_DIR / f"{algorithm.slug}.partial.json"
 
@@ -458,6 +420,44 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                 },
             },
         ),
+        "pagerank": SparkAlgorithm(
+            slug="pagerank",
+            x_key="nodes",
+            points=[100_000, 500_000, 1_000_000, 2_000_000, 5_000_000],
+            generator_repo="pagerank",
+            generator_script="setup_large_pagerank_data.py",
+            dataset_name_fn=lambda size: f"large_pagerank_{size}.txt",
+            generator_args_fn=lambda size, dataset: [
+                "--nodes", str(size),
+                "--partitions", "4",
+                "--density", "10",
+                "--output", str(dataset),
+                "--no-s3",
+            ],
+            submit_script="submit-pagerank.sh",
+            submit_args_fn=lambda container_input, output_path, _size: [
+                container_input,
+                output_path,
+                "4",
+                "100",
+                "0.000001",
+                "0.85",
+            ],
+            configuration={
+                "partitions": 4,
+                "max_iter": 100,
+                "damping": 0.85,
+                "tolerance": 1e-6,
+                "density": 10,
+                "spark_env": {
+                    "SPARK_TOTAL_EXECUTOR_CORES": "4",
+                    "SPARK_EXECUTOR_CORES": "1",
+                    "SPARK_EXECUTOR_MEMORY": "4g",
+                    "SPARK_DEFAULT_PARALLELISM": "4",
+                    "SPARK_SHUFFLE_PARTITIONS": "4",
+                },
+            },
+        ),
         "labelpropagation": SparkAlgorithm(
             slug="labelpropagation",
             x_key="nodes",
@@ -498,7 +498,6 @@ def build_algorithms() -> dict[str, SparkAlgorithm]:
                 },
             },
         ),
-        "wcc": connected_components_algorithm("wcc"),
     }
 
 
@@ -593,27 +592,6 @@ def with_resource_overrides(
             configuration=config,
         )
 
-    if algorithm.slug == "wcc":
-        return replace(
-            algorithm,
-            points=points or algorithm.points,
-            generator_args_fn=lambda size, dataset: [
-                "--nodes", str(size),
-                "--edges-per-node", "5",
-                "--components", "10",
-                "--partitions", str(partitions),
-                "--output", str(dataset),
-                "--key", f"wcc-graphs/wcc-{size}",
-                "--no-s3",
-            ],
-            submit_args_fn=lambda container_input, output_path, _size: [
-                container_input,
-                output_path,
-                str(partitions),
-            ],
-            configuration=config,
-        )
-
     return replace(algorithm, points=points or algorithm.points, configuration=config)
 
 
@@ -621,7 +599,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run Spark baselines for the graph algorithms used in the TFM.")
     parser.add_argument(
         "--algorithms",
-        default="bfs,sssp,labelpropagation,wcc",
+        default="bfs,sssp,labelpropagation",
         help="Comma-separated Spark baseline steps to run.",
     )
     parser.add_argument("--runs", type=int, default=3, help="Repetitions per point.")

@@ -17,9 +17,87 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::cmp::Ordering;
 
-const UNKNOWN: u32 = u32::MAX;
+pub const UNKNOWN: u32 = u32::MAX;
 
-fn majority_label(counts: &HashMap<u32, usize>, current: u32) -> u32 {
+/// Compressed Sparse Row representation of an undirected graph.
+///
+/// `row_offsets[i]..row_offsets[i+1]` indexes into `dst` to give the
+/// adjacency list of node `i`. Length of `row_offsets` is `num_nodes + 1`.
+#[derive(Debug, Clone)]
+pub struct CsrGraph {
+    pub num_nodes: u32,
+    pub row_offsets: Vec<u32>,
+    pub dst: Vec<u32>,
+}
+
+impl CsrGraph {
+    pub fn neighbors(&self, node: u32) -> &[u32] {
+        let i = node as usize;
+        let start = self.row_offsets[i] as usize;
+        let end = self.row_offsets[i + 1] as usize;
+        &self.dst[start..end]
+    }
+
+    pub fn num_edges(&self) -> usize {
+        self.dst.len()
+    }
+}
+
+/// Build a CSR graph from a directed edge list. Each `(u, v)` becomes one entry
+/// in `u`'s adjacency. Callers wanting undirected graphs must include both
+/// `(u, v)` and `(v, u)` in `edges`.
+pub fn build_csr_from_edges(num_nodes: u32, edges: &[(u32, u32)]) -> CsrGraph {
+    let n = num_nodes as usize;
+    let mut row_offsets = vec![0u32; n + 1];
+    for &(src, _) in edges {
+        if (src as usize) < n {
+            row_offsets[src as usize + 1] += 1;
+        }
+    }
+    for i in 1..=n {
+        row_offsets[i] += row_offsets[i - 1];
+    }
+    let total = row_offsets[n] as usize;
+    let mut dst = vec![0u32; total];
+    let mut cursor = row_offsets.clone();
+    for &(src, dst_node) in edges {
+        let i = src as usize;
+        if i < n {
+            let pos = cursor[i] as usize;
+            dst[pos] = dst_node;
+            cursor[i] += 1;
+        }
+    }
+    CsrGraph { num_nodes, row_offsets, dst }
+}
+
+/// Build CSR from a HashMap adjacency. Used by the legacy [`run_lp`] wrapper
+/// to keep backwards compatibility.
+pub fn build_csr_from_adj(adj: &HashMap<u32, Vec<u32>>, num_nodes: u32) -> CsrGraph {
+    let n = num_nodes as usize;
+    let mut row_offsets = vec![0u32; n + 1];
+    for (&src, neigh) in adj.iter() {
+        if (src as usize) < n {
+            row_offsets[src as usize + 1] = neigh.len() as u32;
+        }
+    }
+    for i in 1..=n {
+        row_offsets[i] += row_offsets[i - 1];
+    }
+    let total = row_offsets[n] as usize;
+    let mut dst = vec![0u32; total];
+    for i in 0..num_nodes {
+        if let Some(neigh) = adj.get(&i) {
+            let start = row_offsets[i as usize] as usize;
+            for (k, &v) in neigh.iter().enumerate() {
+                dst[start + k] = v;
+            }
+        }
+    }
+    CsrGraph { num_nodes, row_offsets, dst }
+}
+
+pub fn majority_label(counts: &HashMap<u32, usize>, current: u32) -> u32 {
     if counts.is_empty() {
         return current;
     }
@@ -45,17 +123,10 @@ fn majority_label(counts: &HashMap<u32, usize>, current: u32) -> u32 {
     best
 }
 
-pub fn run_lp(
-    adj: &HashMap<u32, Vec<u32>>,
-    initial_labels: &HashMap<u32, u32>,
-    num_nodes: u32,
-    max_iter: u32,
-) -> Vec<u32> {
+/// Initialize label vector with semi-supervised seeds (or self-id in unsupervised mode).
+pub fn init_labels(num_nodes: u32, initial_labels: &HashMap<u32, u32>) -> Vec<u32> {
     let mut labels = vec![UNKNOWN; num_nodes as usize];
-    let unsupervised_mode = initial_labels.is_empty();
-
-    // Inicializar etiquetas (mismo criterio que ow-lp)
-    if unsupervised_mode {
+    if initial_labels.is_empty() {
         for i in 0..num_nodes {
             labels[i as usize] = i;
         }
@@ -66,34 +137,48 @@ pub fn run_lp(
             }
         }
     }
+    labels
+}
+
+/// CSR-based label propagation. Canonical entry point reused by standalone,
+/// rayon and mpi variants. The HashMap-based [`run_lp`] is a thin wrapper that
+/// builds a [`CsrGraph`] and calls this.
+pub fn run_lp_csr(
+    csr: &CsrGraph,
+    initial_labels: &HashMap<u32, u32>,
+    max_iter: u32,
+) -> Vec<u32> {
+    let num_nodes = csr.num_nodes;
+    let mut labels = init_labels(num_nodes, initial_labels);
+    let unsupervised_mode = initial_labels.is_empty();
+
+    let mut prev_labels = vec![UNKNOWN; num_nodes as usize];
+    let mut counts: HashMap<u32, usize> = HashMap::new();
 
     for _ in 0..max_iter {
-        let prev_labels = labels.clone(); // Estado consistente al inicio de la iteración
+        prev_labels.copy_from_slice(&labels);
         let mut changed = 0;
 
         for i in 0..num_nodes {
-            // Criterio: En modo supervisado, las semillas no cambian (Clamping)
             if !unsupervised_mode && initial_labels.contains_key(&i) {
                 continue;
             }
 
             let current_label = prev_labels[i as usize];
 
-            if let Some(neighbors) = adj.get(&i) {
-                let mut counts = HashMap::new();
-                for &neighbor in neighbors {
-                    let l = prev_labels[neighbor as usize];
-                    if l != UNKNOWN {
-                        *counts.entry(l).or_insert(0) += 1;
-                    }
+            counts.clear();
+            for &neighbor in csr.neighbors(i) {
+                let l = prev_labels[neighbor as usize];
+                if l != UNKNOWN {
+                    *counts.entry(l).or_insert(0) += 1;
                 }
+            }
 
-                let new_label = majority_label(&counts, current_label);
-                
-                if new_label != current_label {
-                    labels[i as usize] = new_label;
-                    changed += 1;
-                }
+            let new_label = majority_label(&counts, current_label);
+
+            if new_label != current_label {
+                labels[i as usize] = new_label;
+                changed += 1;
             }
         }
 
@@ -102,6 +187,19 @@ pub fn run_lp(
         }
     }
     labels
+}
+
+/// Backwards-compatible wrapper that builds a CSR on the fly and delegates to
+/// [`run_lp_csr`]. New code (rayon, mpi, benchmark drivers) should construct
+/// a [`CsrGraph`] once and call [`run_lp_csr`] directly to avoid the build cost.
+pub fn run_lp(
+    adj: &HashMap<u32, Vec<u32>>,
+    initial_labels: &HashMap<u32, u32>,
+    num_nodes: u32,
+    max_iter: u32,
+) -> Vec<u32> {
+    let csr = build_csr_from_adj(adj, num_nodes);
+    run_lp_csr(&csr, initial_labels, max_iter)
 }
 
 /// Represents a single node in the graph
@@ -554,6 +652,42 @@ mod tests {
         let result_many = run_lp(&adj, &initial_labels, 3, 100);
 
         assert_eq!(result_few, result_many, "Should converge quickly");
+    }
+
+    #[test]
+    fn test_csr_build_from_edges() {
+        // Undirected triangle 0-1-2 — caller passes both directions
+        let edges = vec![(0, 1), (1, 0), (1, 2), (2, 1), (0, 2), (2, 0)];
+        let csr = build_csr_from_edges(3, &edges);
+        assert_eq!(csr.num_nodes, 3);
+        assert_eq!(csr.num_edges(), 6);
+        let mut n0 = csr.neighbors(0).to_vec();
+        n0.sort();
+        assert_eq!(n0, vec![1, 2]);
+        let mut n1 = csr.neighbors(1).to_vec();
+        n1.sort();
+        assert_eq!(n1, vec![0, 2]);
+    }
+
+    #[test]
+    fn test_csr_lp_matches_hashmap_lp() {
+        // Same graph via HashMap and CSR must yield identical labels.
+        let mut adj: HashMap<u32, Vec<u32>> = HashMap::new();
+        adj.insert(0, vec![1, 2]);
+        adj.insert(1, vec![0, 2]);
+        adj.insert(2, vec![0, 1]);
+        adj.insert(3, vec![4, 5]);
+        adj.insert(4, vec![3, 5]);
+        adj.insert(5, vec![3, 4]);
+
+        let mut seeds = HashMap::new();
+        seeds.insert(0, 10);
+        seeds.insert(3, 20);
+
+        let csr = build_csr_from_adj(&adj, 6);
+        let via_csr = run_lp_csr(&csr, &seeds, 10);
+        let via_hash = run_lp(&adj, &seeds, 6, 10);
+        assert_eq!(via_csr, via_hash);
     }
 
     #[test]
